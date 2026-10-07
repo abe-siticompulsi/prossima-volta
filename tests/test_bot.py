@@ -98,6 +98,7 @@ def test_i_rifiuti_rispondono_al_comando_e_non_aprono_niente(bot, telegram, stor
         comando("/sondaggio 32/10"),
         comando("/sondaggio 3/10"),
         comando("/sondaggio " + " ".join(f"{g}/10" for g in range(13, 24))),
+        comando("/sondaggio 14/10/2052"),
     ]
     bot.ricevi(sbagliati)
     assert telegram.di_tipo("scrivi") == [
@@ -118,6 +119,12 @@ def test_i_rifiuti_rispondono_al_comando_e_non_aprono_niente(bot, telegram, stor
             "testo": "Troppe date: al massimo 10.",
             "entita": [],
             "risposta_a": sbagliati[2]["message"]["message_id"],
+        },
+        {
+            "chat_id": GRUPPO,
+            "testo": "La data 14/10/2052 è troppo lontana.",
+            "entita": [],
+            "risposta_a": sbagliati[3]["message"]["message_id"],
         },
     ]
     assert telegram.di_tipo("manda_sondaggio") == []

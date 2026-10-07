@@ -112,12 +112,72 @@ def test_al_massimo_10_date_contate_senza_doppioni():
         regole.date_del_comando([*dieci, "23/10"], OGGI)
 
 
+@pytest.mark.parametrize(
+    "parola",
+    [
+        "١٤/١٠",  # cifre arabo-indiche
+        "１４/１０",  # cifre a larghezza piena
+        "१४/१०/२०२५",  # cifre devanagari
+        "14/10/２０２５",  # l'anno a metà
+    ],
+)
+def test_le_cifre_che_non_sono_ascii_non_sono_date(parola):
+    with pytest.raises(regole.NonCapisco) as rifiuto:
+        regole.date_del_comando([parola], OGGI)
+    assert rifiuto.value.parola == parola
+    with pytest.raises(regole.NonCapisco):
+        regole.data_da_chiudere(parola, [d("14/10")], OGGI)
+
+
+def test_una_data_oltre_un_anno_da_oggi_e_troppo_lontana():
+    # lo stesso giorno dell'anno dopo è ancora buono, il giorno dopo no
+    assert regole.date_del_comando(["7/10/2026"], OGGI) == [d("7/10", 2026)]
+    for scritta, attesa in [("8/10/2026", "8/10/2026"), ("14.10.2052", "14/10/2052")]:
+        with pytest.raises(regole.DataTroppoLontana) as rifiuto:
+            regole.date_del_comando([scritta], OGGI)
+        assert rifiuto.value.scritta == attesa
+    # il 29/2 non ha lo stesso giorno dell'anno dopo: il limite è il 28/2
+    assert regole.date_del_comando(["28/2/2025"], date(2024, 2, 29)) == [date(2025, 2, 28)]
+    with pytest.raises(regole.DataTroppoLontana):
+        regole.date_del_comando(["1/3/2025"], date(2024, 2, 29))
+
+
+def test_la_data_troppo_lontana_ferma_anche_il_resto_del_comando():
+    with pytest.raises(regole.DataTroppoLontana):
+        regole.date_del_comando(["14/10", "14/10/2052"], OGGI)
+    # «9999» non fa più arrivare un OverflowError alle date rimandate
+    with pytest.raises(regole.DataTroppoLontana):
+        regole.date_del_comando(["31/12/9999"], OGGI)
+
+
+def test_il_29_2_senza_anno_e_il_prossimo_29_febbraio():
+    # in un anno non bisestile: il prossimo, qualunque cosa dica l'anno scorso
+    assert regole.date_del_comando(["29/2"], date(2027, 12, 1)) == [date(2028, 2, 29)]
+    assert regole.date_del_comando(["29.2"], date(2027, 3, 1)) == [date(2028, 2, 29)]
+    # e se il prossimo è oltre un anno, la data è troppo lontana, con l'anno
+    with pytest.raises(regole.DataTroppoLontana) as rifiuto:
+        regole.date_del_comando(["29/2"], OGGI)
+    assert rifiuto.value.scritta == "29/2/2028"
+    # il secolo non bisestile: dopo il 2096 il prossimo è il 2104
+    with pytest.raises(regole.DataTroppoLontana) as rifiuto:
+        regole.date_del_comando(["29/2"], date(2097, 1, 1))
+    assert rifiuto.value.scritta == "29/2/2104"
+
+
+def test_il_29_2_senza_anno_in_un_anno_bisestile_segue_la_regola_di_tutte_le_date():
+    assert regole.date_del_comando(["29/2"], date(2028, 1, 10)) == [date(2028, 2, 29)]
+    assert regole.date_del_comando(["29/2"], date(2028, 2, 29)) == [date(2028, 2, 29)]  # oggi compreso
+    with pytest.raises(regole.DataPassata) as rifiuto:
+        regole.date_del_comando(["29/2"], date(2028, 3, 10))
+    assert rifiuto.value.scritta == "29/2"
+
+
 SONDAGGIO = [d("14/10"), d("16/10")]
 
 
 @pytest.mark.parametrize("parola", ["14/10", "14.10", "14/10/2025", "mar", "MAR"])
 def test_chiudere_tenendo_una_data_del_sondaggio(parola):
-    assert regole.data_da_chiudere(parola, SONDAGGIO) == d("14/10")
+    assert regole.data_da_chiudere(parola, SONDAGGIO, OGGI) == d("14/10")
 
 
 @pytest.mark.parametrize(
@@ -125,26 +185,56 @@ def test_chiudere_tenendo_una_data_del_sondaggio(parola):
 )
 def test_chiudere_con_una_data_che_non_era_nel_sondaggio(parola, scritta):
     with pytest.raises(regole.NonNelSondaggio) as rifiuto:
-        regole.data_da_chiudere(parola, SONDAGGIO)
+        regole.data_da_chiudere(parola, SONDAGGIO, OGGI)
     assert rifiuto.value.scritta == scritta
 
 
 @pytest.mark.parametrize("parola, giorno", [("ven", 4), ("Ven", 4), ("dom", 6)])
 def test_chiudere_con_un_giorno_che_non_e_nel_sondaggio(parola, giorno):
     with pytest.raises(regole.GiornoAssente) as rifiuto:
-        regole.data_da_chiudere(parola, SONDAGGIO)
+        regole.data_da_chiudere(parola, SONDAGGIO, OGGI)
     assert rifiuto.value.giorno == giorno
 
 
 def test_chiudere_con_un_giorno_che_nel_sondaggio_compare_due_volte():
     with pytest.raises(regole.GiornoAmbiguo) as rifiuto:
-        regole.data_da_chiudere("Mar", [d("14/10"), d("16/10"), d("21/10")])
+        regole.data_da_chiudere("Mar", [d("14/10"), d("16/10"), d("21/10")], OGGI)
     assert (rifiuto.value.giorno, rifiuto.value.prima_data) == (1, d("14/10"))
+
+
+def test_il_giorno_di_chiudi_conta_solo_le_date_da_oggi_in_poi():
+    mercoledi = d("15/10")
+    # un solo martedì futuro: è quello da tenere
+    assert regole.data_da_chiudere("mar", [d("14/10"), d("21/10")], mercoledi) == d("21/10")
+    # più martedì futuri: l'esempio del messaggio è il primo futuro
+    with pytest.raises(regole.GiornoAmbiguo) as rifiuto:
+        regole.data_da_chiudere("mar", [d("14/10"), d("21/10"), d("28/10")], mercoledi)
+    assert (rifiuto.value.giorno, rifiuto.value.prima_data) == (1, d("21/10"))
+    # oggi non è passato
+    assert regole.data_da_chiudere("mar", [d("7/10"), d("14/10")], d("14/10")) == d("14/10")
+
+
+def test_il_giorno_di_chiudi_con_soli_martedi_passati_segue_il_percorso_di_oggi():
+    mercoledi = d("15/10")
+    # un solo martedì, passato: lo restituisce, ed è il bot a dire «è già passata»
+    assert regole.data_da_chiudere("mar", SONDAGGIO, mercoledi) == d("14/10")
+    # più martedì, tutti passati: come oggi, serve la data
+    with pytest.raises(regole.GiornoAmbiguo) as rifiuto:
+        regole.data_da_chiudere("mar", [d("7/10"), d("14/10")], mercoledi)
+    assert rifiuto.value.prima_data == d("7/10")
+    # un giorno che nel sondaggio non c'è resta assente, passato o no
+    with pytest.raises(regole.GiornoAssente):
+        regole.data_da_chiudere("ven", SONDAGGIO, mercoledi)
+
+
+def test_la_data_di_chiudi_scritta_per_intero_non_dipende_da_oggi():
+    # una data del sondaggio già passata si restituisce: il rifiuto «è già passata» è del bot
+    assert regole.data_da_chiudere("14/10", SONDAGGIO, d("15/10")) == d("14/10")
 
 
 def test_chiudere_con_una_parola_strana():
     with pytest.raises(regole.NonCapisco):
-        regole.data_da_chiudere("boh", SONDAGGIO)
+        regole.data_da_chiudere("boh", SONDAGGIO, OGGI)
 
 
 def test_il_lunedi_della_settimana():

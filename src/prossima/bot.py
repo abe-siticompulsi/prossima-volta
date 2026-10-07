@@ -292,10 +292,12 @@ class Bot:
         dice una volta per sondaggio, e solo se c'è stato da poco un sondaggio
         che Telegram non ha confermato: i voti del piano reale restano nel log.
         Con un sondaggio aperto l'avviso risponde a quello: è lì che si vota.
-        Mentre la ripresa aspetta di riaprire, solo il log."""
+        Durante tutta la ripresa (fermare e riaprire), solo il log."""
         log.warning("voto per un sondaggio sconosciuto: %s", poll_id)
-        if self._in_riapertura() is not None:
-            return  # «Rilanciatelo» farebbe buttare i voti che la riapertura tiene
+        if self._store.ripresa() is not None:
+            # «Rilanciatelo» farebbe buttare i voti che la ripresa tiene, e «votate
+            # qui» manderebbe a votare un sondaggio che sta per fermarsi
+            return
         tentativo = self._store.ultimo_non_confermato()
         adesso = self._adesso()
         if tentativo is None or adesso - tentativo.alle > NON_CONFERMATO_DI_RECENTE:
@@ -338,8 +340,9 @@ class Bot:
             argomento = regole.RIMANDA
         elif parole:
             try:
-                tenuta = regole.data_da_chiudere(parole[0], sondaggio.date)
-                if tenuta < self._oggi():
+                oggi = self._oggi()
+                tenuta = regole.data_da_chiudere(parole[0], sondaggio.date, oggi)
+                if tenuta < oggi:
                     raise regole.DataPassata(regole.breve(tenuta))
             except regole.Rifiuto as r:
                 self._accoda(testi.rifiuto_di_chiudi(r), risposta_a=comando)
@@ -475,10 +478,16 @@ class Bot:
         if chiusura.argomento is not None:
             lettere.append(testi.si_gioca(date.fromisoformat(chiusura.argomento)))
         else:
-            # il riepilogo dice solo le date in cui si può ancora giocare
+            # il riepilogo dice solo le date in cui si può ancora giocare; se c'erano
+            # date possibili ma sono tutte passate, non dice che non ce n'erano
             oggi = self._oggi()
-            possibili = [g for g in regole.possibili(self._stato(sondaggio)) if g >= oggi]
-            lettere.append(testi.chiuso(possibili))
+            tutte = regole.possibili(self._stato(sondaggio))
+            possibili = [g for g in tutte if g >= oggi]
+            lettere.append(
+                testi.chiuso(possibili)
+                if possibili or not tutte
+                else testi.chiuso_con_le_date_possibili_passate()
+            )
         self._store.chiudi_sondaggio(
             sondaggio.id, self._adesso(), chiusura.comando, self._lettere(lettere)
         )

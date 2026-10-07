@@ -184,6 +184,8 @@ def rifiuto(r: regole.Rifiuto) -> Testo:
             )
         case regole.DataPassata():
             return Testo(f"La data {r.scritta} è già passata.")
+        case regole.DataTroppoLontana():
+            return Testo(f"La data {r.scritta} è troppo lontana.")
         case regole.TroppeDate():
             return Testo(f"Troppe date: al massimo {regole.MASSIMO_DATE}.")
     raise TypeError(f"rifiuto sconosciuto: {r!r}")
@@ -266,6 +268,12 @@ def chiuso(possibili: Sequence[date]) -> Testo:
     return Testo(
         f"🔒 Sondaggio chiuso. Date possibili: {', '.join(regole.etichetta(g) for g in possibili)}."
     )
+
+
+def chiuso_con_le_date_possibili_passate() -> Testo:
+    """Il riepilogo di chiusura quando c'erano date possibili, ma sono tutte già
+    passate: «nessuna data con il master e quattro giocatori» sarebbe falso."""
+    return Testo("🔒 Sondaggio chiuso. Nessuna data possibile da oggi in poi.")
 
 
 def si_gioca(giorno: date) -> Testo:

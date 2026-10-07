@@ -19,12 +19,18 @@ from pathlib import Path
 from . import config
 from .bot import COMANDI, Bot
 from .store import Store
-from .telegram import BotTelegram, TelegramError
+from .telegram import BotTelegram, TelegramError, TelegramTroppeRichieste
 
 log = logging.getLogger(__name__)
 
 ATTESA = 25  # secondi di long polling
 BATTITO_MASSIMO = 120  # secondi: oltre, il container è malato
+# Dopo errori di fila la pausa raddoppia a ogni errore, fino a qui: con una
+# lettura che scade (35 secondi) il battito resta sotto il massimo.
+PAUSA_MASSIMA = 60
+# Un'attesa più lunga (un 429 con un `retry_after` grande) si fa a fette di
+# questa durata, e il battito si tocca a ogni fetta: il ciclo gira, aspetta.
+FETTA_DI_ATTESA = 60
 
 
 def configura_log() -> None:
@@ -46,16 +52,38 @@ def ciclo(
     pausa_errore: float = 5.0,
 ) -> None:
     """Legge il bot in long polling finché `fermo` non è impostato, e tocca il
-    battito a ogni giro. Non si ferma per un errore: lo registra e riprova."""
+    battito a ogni giro. Non si ferma per un errore: lo registra, aspetta e
+    riprova. La pausa è `pausa_errore`, e raddoppia a ogni errore di fila fino a
+    `PAUSA_MASSIMA`; torna normale al primo giro riuscito. Dopo un 429 si aspetta
+    almeno quanto chiede Telegram. Il battito dice che il ciclo gira, non che
+    Telegram risponde: si tocca anche dopo un errore e durante l'attesa."""
+    pausa_corrente = pausa_errore
     while not fermo.is_set():
+        pausa = 0.0
         try:
             bot.ricevi(telegram.aggiornamenti(store.offset(), attesa))
-        except TelegramError as e:
-            log.warning("lettura del bot non riuscita: %s", e)
-            fermo.wait(pausa_errore)
-        except Exception:
-            log.exception("ciclo del bot: errore inatteso, riprovo")
-            fermo.wait(pausa_errore)
+            pausa_corrente = pausa_errore
+        except Exception as e:
+            if isinstance(e, TelegramError):
+                log.warning("lettura del bot non riuscita: %s", e)
+            else:
+                log.exception("ciclo del bot: errore inatteso, riprovo")
+            pausa = pausa_corrente
+            if isinstance(e, TelegramTroppeRichieste):
+                pausa = max(pausa, e.retry_after)
+            pausa_corrente = min(pausa_corrente * 2, max(PAUSA_MASSIMA, pausa_errore))
+        _batti(battito)
+        _aspetta(fermo, pausa, battito)
+
+
+def _aspetta(fermo: threading.Event, secondi: float, battito: Path) -> None:
+    """Aspetta `secondi` (o finché `fermo` non è impostato), a fette: dopo ogni
+    fetta il battito si tocca."""
+    restano = secondi
+    while restano > 0 and not fermo.is_set():
+        fetta = min(restano, FETTA_DI_ATTESA)
+        fermo.wait(fetta)
+        restano -= fetta
         _batti(battito)
 
 
@@ -76,8 +104,10 @@ def in_salute(battito: Path, adesso: float | None = None) -> bool:
 
 
 def avvia(env: Mapping[str, str], *, telegram=None, fermo: threading.Event | None = None) -> None:
-    """Costruisce il bot vero e gira finché `fermo` non è impostato (in esercizio,
-    mai: il container lo ferma con un segnale)."""
+    """Costruisce il bot vero e gira finché `fermo` non è impostato. In esercizio
+    non lo è mai: il container lo ferma con SIGTERM, che grazie a `init: true`
+    in `compose.yaml` arriva a Python (PID 1 lo ignorerebbe) e lo termina subito,
+    a metà di qualunque passo. Tutto si recupera al riavvio (spec §4)."""
     imp = config.da_ambiente(env)
     store = Store(imp.db)
     store.crea_schema()

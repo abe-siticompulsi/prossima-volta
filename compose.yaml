@@ -4,6 +4,11 @@ services:
       context: .
       target: servizio
     restart: unless-stopped
+    # Python come PID 1 ignora SIGTERM (il kernel non applica l'azione predefinita
+    # al PID 1 di un container): `docker compose stop` aspetterebbe 10 secondi e
+    # poi ucciderebbe il processo. Con un init il segnale arriva a Python, che
+    # termina subito: lo stato si recupera a ogni riavvio (spec §4).
+    init: true
     env_file: ./config/prossima.env
     volumes:
       - ./dati:/data

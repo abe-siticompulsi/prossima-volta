@@ -231,6 +231,29 @@ def test_riaprire_cambia_il_messaggio_e_tiene_voti_e_fatti(store):
     assert store.ripresa() is None
 
 
+def test_riaprire_con_un_altro_sondaggio_aperto_non_cambia_niente(store):
+    primo = apri(store)
+    store.chiudi_sondaggio(primo.id, ALLE)
+    chiuso = store.sondaggio(primo.id)
+    altro = apri(store, poll_id="poll-2", messaggio=502)
+    with pytest.raises(sqlite3.IntegrityError):
+        store.riapri_sondaggio(
+            primo.id,
+            (d("16/10"),),
+            "poll-9",
+            909,
+            "Nessuna: ho tirato 1 sul calendario",
+            Fatti(quasi=frozenset({d("16/10")})),
+            ALLE,
+            [LetteraNuova(-100, "Riapro il sondaggio.")],
+        )
+    # il primo resta com'era: chiuso, con il suo sondaggio di Telegram, le sue date e i suoi fatti
+    assert store.sondaggio(primo.id) == chiuso
+    assert store.fatti(primo.id) == Fatti()
+    assert store.sondaggio_aperto() == altro
+    assert store.posta() == []
+
+
 def test_chiudere_il_sondaggio_che_aspetta_la_riapertura_finisce_la_ripresa(store):
     s = apri(store)
     store.inizia_ripresa(ALLE, [], s.id)
@@ -296,6 +319,16 @@ def test_i_voti_di_un_sondaggio_di_telegram(store):
     store.registra_voto(s.id, ESTRANEO, "poll-2", Voto(nessuna=True), ALLE)
     assert store.voti_del_poll(s.id, "poll-1") == [Voto(frozenset({d("14/10")}))]
     assert store.voti_del_poll(s.id, "poll-2") == [Voto(nessuna=True)]
+
+
+def test_un_voto_rifatto_in_un_altro_sondaggio_di_telegram_cambia_sondaggio(store):
+    s = apri(store)
+    store.registra_voto(s.id, GIO.telegram_id, "poll-1", Voto(frozenset({d("14/10")})), ALLE)
+    sedici = Voto(frozenset({d("16/10")}))
+    store.registra_voto(s.id, GIO.telegram_id, "poll-2", sedici, ALLE)
+    # esce dai voti del sondaggio di prima, entra in quelli del nuovo
+    assert store.voti_del_poll(s.id, "poll-1") == []
+    assert store.voti_del_poll(s.id, "poll-2") == [sedici]
 
 
 def test_i_fatti_tornano_come_sono_stati_salvati(store):

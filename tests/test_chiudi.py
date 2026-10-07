@@ -143,6 +143,25 @@ def test_il_riepilogo_della_chiusura_non_elenca_le_date_passate(bot, telegram, o
     assert telegram.scritti()[-1] == "🔒 Sondaggio chiuso. Date possibili: gio 16/10."
 
 
+@pytest.mark.parametrize("giorno", [15, 17])  # il 14 è passato; il 14 e il 16 sono passati
+def test_il_riepilogo_con_le_date_possibili_tutte_passate_non_dice_che_non_ce_n_erano(
+    bot, telegram, orologio, aperto, giorno
+):
+    for persona in (GIO, ABE, EMI, SEM, SESE):
+        vota(bot, telegram, persona, "14/10")
+    fino_al(bot, orologio, giorno)
+    bot.ricevi([comando("/chiudi")])
+    assert telegram.scritti()[-1] == "🔒 Sondaggio chiuso. Nessuna data possibile da oggi in poi."
+
+
+def test_il_riepilogo_senza_date_possibili_resta_vero_anche_a_date_passate(
+    bot, telegram, orologio, aperto
+):
+    fino_al(bot, orologio, 17)  # nessuno ha votato: nessuna data aveva il master e quattro giocatori
+    bot.ricevi([comando("/chiudi")])
+    assert telegram.scritti()[-1] == NESSUNA_POSSIBILE
+
+
 @pytest.mark.parametrize("parola", ["14/10", "14/10/2025", "mar"])
 def test_chiudi_con_una_data_passata_lascia_il_sondaggio_aperto(
     bot, telegram, store, orologio, aperto, parola
@@ -164,6 +183,28 @@ def test_chiudi_con_un_giorno_che_nel_sondaggio_compare_due_volte(bot, telegram,
     bot.ricevi([chiudi])
     assert [(a["testo"], a["risposta_a"]) for a in telegram.di_tipo("scrivi")] == [
         ("Nel sondaggio c'è più di un martedì: scrivi la data (14/10).", chiudi["message"]["message_id"])
+    ]
+    assert store.sondaggio_aperto() == aperto
+
+
+def test_chiudi_con_il_giorno_conta_solo_le_date_da_oggi_in_poi(bot, telegram, store, orologio):
+    bot.ricevi([comando("/sondaggio 14/10 21/10")])
+    fino_al(bot, orologio, 15)  # mercoledì 15/10: il martedì 14 è passato, il 21 no
+    bot.ricevi([comando("/chiudi mar")])
+    assert telegram.scritti() == ["🎲 Si gioca martedì 21/10."]
+    assert store.sondaggio_aperto() is None
+
+
+def test_chiudi_con_un_giorno_che_compare_due_volte_da_oggi_in_poi_fa_l_esempio_con_il_primo_futuro(
+    bot, telegram, store, orologio
+):
+    bot.ricevi([comando("/sondaggio 14/10 21/10 28/10")])
+    aperto = store.sondaggio_aperto()
+    fino_al(bot, orologio, 15)
+    chiudi = comando("/chiudi mar")
+    bot.ricevi([chiudi])
+    assert [(a["testo"], a["risposta_a"]) for a in telegram.di_tipo("scrivi")] == [
+        ("Nel sondaggio c'è più di un martedì: scrivi la data (21/10).", chiudi["message"]["message_id"])
     ]
     assert store.sondaggio_aperto() == aperto
 

@@ -392,15 +392,16 @@ def test_mentre_lo_stop_della_ripresa_non_e_confermato_il_sondaggio_non_conta_co
     telegram.guasti["ferma_sondaggio"] = telegram_guasto("ferma_sondaggio")
     lancio = comando("/sondaggio")
     bot.ricevi([lancio, risposta("poll-orfano", ABE.telegram_id, 0)])
-    # né «C'è già un sondaggio aperto» né «votate qui»: forse è già fermo
-    assert [(a["testo"], a["risposta_a"]) for a in telegram.di_tipo("scrivi")][-2:] == [
+    # né «C'è già un sondaggio aperto» né «votate qui»: forse è già fermo. E il
+    # voto sconosciuto resta nel log: la ripresa è in corso
+    assert [(a["testo"], a["risposta_a"]) for a in telegram.di_tipo("scrivi")][-1:] == [
         (
             "Telegram non ha ancora confermato la chiusura del sondaggio di prima: "
             "riprovate fra poco.",
             lancio["message"]["message_id"],
         ),
-        (SCONOSCIUTO_MAR, None),
     ]
+    assert SCONOSCIUTO_MAR not in telegram.scritti()
 
 
 def test_i_voti_al_sondaggio_fermato_mentre_la_riapertura_aspetta_si_tengono(
@@ -435,6 +436,22 @@ def test_mentre_la_riapertura_aspetta_un_voto_sconosciuto_va_solo_nel_log(
     # «Rilanciatelo» farebbe buttare i voti tenuti
     assert telegram.scritti() == [BUIO, UGUALI]
     assert any("poll-orfano" in messaggio for _, messaggio, _ in avvisi(caplog))
+
+
+def test_mentre_la_ripresa_fa_lo_stop_un_voto_sconosciuto_va_solo_nel_log(
+    bot, telegram, store, orologio, caplog
+):
+    vecchio = sondaggio_con_tre_voti(bot, telegram, store)
+    store.segna_non_confermato(orologio.adesso, ["mar"])
+    telegram.guasti["ferma_sondaggio"] = telegram_guasto("ferma_sondaggio")
+    dopo_il_buio(bot, orologio)
+    assert store.ripresa() == RipresaInCorso(vecchio.id, FERMARE, stop_provato=True)
+    with caplog.at_level(logging.WARNING):
+        bot.ricevi([risposta("poll-orfano", ABE.telegram_id, 0)])
+    # «Rilanciatelo», come «votate qui», farebbe buttare i voti che la ripresa tiene
+    assert telegram.scritti() == [BUIO]
+    assert any("poll-orfano" in messaggio for _, messaggio, _ in avvisi(caplog))
+    assert store.ripresa() == RipresaInCorso(vecchio.id, FERMARE, stop_provato=True)
 
 
 def test_un_429_nella_ripresa(bot, telegram, store, orologio):

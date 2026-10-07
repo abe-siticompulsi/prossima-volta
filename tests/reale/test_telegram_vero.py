@@ -18,7 +18,7 @@ import pytest
 from prossima import regole, testi
 from prossima.bot import COMANDI
 from prossima.regole import Persona
-from prossima.telegram import BotTelegram, MessaggioSparito, SondaggioGiaChiuso
+from prossima.telegram import BotTelegram, MessaggioSparito, SondaggioGiaChiuso, TelegramRifiuto
 from tests.reale.ambiente import richiesta
 
 pytestmark = pytest.mark.reale
@@ -47,7 +47,11 @@ def risposte(b: BotTelegram, poll_id: str, quante: int) -> list[dict]:
         if len(trovate) >= quante:
             return trovate[:quante]
         time.sleep(1)
-    pytest.fail(f"in {ATTESA_VOTI} secondi sono arrivate {len(trovate)} risposte su {quante}")
+    pytest.fail(
+        f"in {ATTESA_VOTI} secondi sono arrivate {len(trovate)} risposte su {quante}: "
+        "il servizio è davvero fermo? (due lettori si rubano i voti) "
+        f"hai votato entro {ATTESA_VOTI // 60} minuti?"
+    )
 
 
 def test_il_nome_del_bot():
@@ -73,6 +77,20 @@ def test_una_menzione_dopo_un_emoji_cade_sul_nome():
     assert entita["type"] == "text_mention"
     assert (entita["offset"], entita["length"]) == (t.entita[0]["offset"], 3)
     assert entita["user"]["id"] == chat()
+
+
+def test_un_sondaggio_con_undici_opzioni_parte():
+    """Contratto: Telegram accetta un sondaggio con 11 opzioni (10 date e la
+    frase di «Nessuna» più lunga, di al massimo 100 caratteri), non anonimo e a
+    risposta multipla. Non serve votare: `stopPoll` dà un conteggio per ognuna."""
+    b = bot()
+    date_ = [date.today() + timedelta(days=i) for i in range(1, regole.MASSIMO_DATE + 1)]
+    frase = max(testi.FRASI_NESSUNA, key=len)
+    assert len(frase) <= testi.LUNGHEZZA_OPZIONE
+    mandato = b.manda_sondaggio(
+        chat(), "🧪 Prova di Prossima volta: 11 opzioni, non serve votare.", testi.opzioni(date_, frase)
+    )
+    assert b.ferma_sondaggio(chat(), mandato.messaggio) == [0] * (regole.MASSIMO_DATE + 1)
 
 
 def test_sondaggio_voto_ritiro_e_conteggi():
@@ -110,9 +128,20 @@ def test_fermare_un_sondaggio_cancellato():
 
 def test_fermare_due_volte():
     """Contratto: un secondo `stopPoll` sullo stesso sondaggio risponde con una
-    descrizione che `SondaggioGiaChiuso` riconosce."""
+    descrizione che `SondaggioGiaChiuso` riconosce («poll has already been
+    closed»). Da lì dipende la ripresa di una chiusura interrotta: se la
+    descrizione vera è un'altra, la prova la riporta, e si corregge
+    `_GIA_CHIUSO` in `telegram.py` (e le differenze fra test e realtà)."""
     b = bot()
     mandato = b.manda_sondaggio(chat(), "🧪 Prova di Prossima volta: mi fermo due volte.", ["sì", "no"])
     assert b.ferma_sondaggio(chat(), mandato.messaggio) == [0, 0]
-    with pytest.raises(SondaggioGiaChiuso):
+    try:
         b.ferma_sondaggio(chat(), mandato.messaggio)
+    except SondaggioGiaChiuso:
+        return
+    except TelegramRifiuto as e:
+        pytest.fail(
+            f"il secondo stopPoll è stato rifiutato con «{e}», che il client non riconosce "
+            "come «già chiuso»: aggiorna `_GIA_CHIUSO` in telegram.py"
+        )
+    pytest.fail("il secondo stopPoll sullo stesso sondaggio è riuscito: Telegram non lo rifiuta")

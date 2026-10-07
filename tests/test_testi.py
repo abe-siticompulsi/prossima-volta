@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from prossima import regole, testi
+from prossima.regole import Persona
 from tests.tavolo import ABE, EMI, GIO, PIPPO, ROSTER, SEM, SESE, d
 
 NOME = "ProssimaVoltaBot"
@@ -47,6 +48,26 @@ def test_quasi_con_le_menzioni_dopo_un_emoji():
     assert all(e["type"] == "text_mention" for e in t.entita)
     # 📅 vale due unità: contando i caratteri la menzione cadrebbe una lettera prima
     assert t.entita[0]["offset"] == t.testo.index("sese") + 1
+
+
+# Un soprannome non ASCII con un'emoji: 5 caratteri, 6 unità UTF-16 (🎲 ne vale due).
+SESE_DADO = Persona("sèsè🎲", SESE.telegram_id, "giocatore")
+
+
+def test_le_menzioni_contano_in_utf16_anche_con_un_soprannome_non_ascii():
+    t = testi.quasi(regole.Quasi(d("14/10"), (GIO, ABE, EMI, SEM), (SESE_DADO, PIPPO)))
+    assert menzionati(t) == [("sèsè🎲", SESE.telegram_id), ("pippo", PIPPO.telegram_id)]
+    # la lunghezza è quella di Telegram, non quella di `len()`...
+    assert [e["length"] for e in t.entita] == [6, 5]
+    assert len(SESE_DADO.soprannome) == 5
+    # ...e la seconda menzione comincia dopo la prima, la virgola e lo spazio
+    assert t.entita[1]["offset"] == t.entita[0]["offset"] + 6 + 2
+
+
+def test_riapro_conta_le_menzioni_in_utf16_dopo_un_soprannome_non_ascii():
+    t = testi.riapro((ABE,), (SESE_DADO, PIPPO))
+    assert menzionati(t) == [("sèsè🎲", SESE.telegram_id), ("pippo", PIPPO.telegram_id)]
+    assert [e["length"] for e in t.entita] == [6, 5]
 
 
 def test_quasi_quando_hanno_votato_tutti():
@@ -102,6 +123,14 @@ def test_impossibile_senza_date_in_tre():
     assert menzionati(t) == [("gio", GIO.telegram_id), ("abe", ABE.telegram_id)]
 
 
+def test_annuncio_sceglie_il_testo_di_ogni_tipo():
+    quasi = regole.Quasi(d("14/10"), (GIO, ABE, EMI, SEM), (SESE,))
+    possibile = regole.Possibile(d("14/10"), (GIO, ABE, EMI, SEM, SESE))
+    assert testi.annuncio(quasi, ROSTER, NOME) == testi.quasi(quasi)
+    assert testi.annuncio(possibile, ROSTER, NOME) == testi.possibile(possibile)
+    assert testi.annuncio(quasi, ROSTER, NOME) != testi.annuncio(possibile, ROSTER, NOME)
+
+
 def test_annuncio_sceglie_il_testo_e_menziona_chi_chiude_dal_roster():
     assert testi.annuncio(regole.NonPiu(d("14/10"), (SEM,)), ROSTER, NOME) == testi.non_piu(
         regole.NonPiu(d("14/10"), (SEM,))
@@ -118,6 +147,7 @@ def test_annuncio_sceglie_il_testo_e_menziona_chi_chiude_dal_roster():
             "Non capisco «32/10»: scrivi i giorni (lun, mar, …) o le date (14/10).",
         ),
         (regole.DataPassata("3/10"), "La data 3/10 è già passata."),
+        (regole.DataTroppoLontana("14/10/2052"), "La data 14/10/2052 è troppo lontana."),
         (regole.TroppeDate(), "Troppe date: al massimo 10."),
     ],
 )
@@ -203,6 +233,9 @@ def test_le_risposte_ai_comandi():
     )
     assert testi.chiuso([]) == testi.Testo(
         "🔒 Sondaggio chiuso. Nessuna data con il master e quattro giocatori."
+    )
+    assert testi.chiuso_con_le_date_possibili_passate() == testi.Testo(
+        "🔒 Sondaggio chiuso. Nessuna data possibile da oggi in poi."
     )
     assert testi.si_gioca(d("14/10")) == testi.Testo("🎲 Si gioca martedì 14/10.")
     assert testi.rimandiamo(d("20/10")) == testi.Testo(

@@ -60,12 +60,19 @@ docker compose logs prossima
 ```
 
 Nel log, entro qualche secondo: «Prossima volta: @<nome_del_bot> nel gruppo
-<PV_GRUPPO>, 6 persone nel roster». Un roster sbagliato ferma l'avvio con una
-riga «configurazione: …» che dice cosa correggere.
+<PV_GRUPPO>, 6 persone nel roster». Un roster o un valore di `prossima.env`
+sbagliato ferma l'avvio con una riga «configurazione: …» che dice cosa
+correggere. Dopo aver corretto: `docker compose up -d`. Il riavvio automatico del
+container (`restart: unless-stopped`) non rilegge `prossima.env`: Docker lo legge
+quando crea il container, e solo `up -d` ne crea uno nuovo.
 
 Dopo un paio di minuti `docker compose ps` mostra il servizio `healthy`: il
 controllo di salute guarda il battito, un file che il ciclo del bot tocca a ogni
 giro (`/data/battito`, deve avere meno di 2 minuti).
+
+Prova anche `docker compose stop prossima`: deve tornare subito, non dopo 10
+secondi (`init: true` in `compose.yaml` fa arrivare il segnale a Python). Poi
+`docker compose start prossima`.
 
 ## 5. A mano, nel gruppo
 
@@ -83,8 +90,9 @@ aggiornamenti. Il piano reale legge `getUpdates` senza offset e non conferma
 niente, quindi alla ripartenza il servizio ritrova tutto quello che è arrivato
 nel frattempo.
 
-Metti il tuo identificativo in `PV_REALE_CHAT` dentro `config/prossima.env`
-(punto 3), poi:
+In `config/prossima.env` (punto 3) togli il `#` dalla riga `PV_REALE_CHAT=` e
+scrivi il tuo identificativo subito dopo il segno `=`, senza altro sulla riga
+(Docker terrebbe tutto quello che c'è dopo come valore). Poi:
 
 ```bash
 docker compose stop prossima
