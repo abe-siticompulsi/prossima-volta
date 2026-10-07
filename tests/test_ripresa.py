@@ -133,6 +133,21 @@ def test_il_sondaggio_cancellato_durante_il_buio(bot, telegram, store, orologio)
     assert len(telegram.di_tipo("manda_sondaggio")) == 1
 
 
+def test_il_sondaggio_gia_chiuso_su_telegram_si_riapre_senza_conteggi(
+    bot, telegram, store, orologio
+):
+    # per ora (giro B): conteggi ignoti, niente frase sui conteggi, si riapre
+    vecchio = sondaggio_con_tre_voti(bot, telegram, store)
+    telegram.fermati.add(vecchio.messaggio)  # uno stop passato senza che il bot lo sapesse
+    dopo_il_buio(bot, orologio)
+    assert telegram.scritti() == [
+        BUIO,
+        "Riapro il sondaggio. Ho già i voti di abe, emi e sem: se non avete cambiato idea, "
+        "non serve rivotare. Non hanno ancora votato: gio, sese, pippo.",
+    ]
+    assert store.sondaggio_aperto().id == vecchio.id
+
+
 def test_gli_annunci_fatti_restano_e_dopo_la_ripresa_non_si_sa_chi(bot, telegram, store, orologio):
     bot.ricevi([comando("/sondaggio mar gio")])
     for persona in (GIO, ABE, EMI, SEM, SESE):
@@ -151,7 +166,7 @@ def test_gli_annunci_fatti_restano_e_dopo_la_ripresa_non_si_sa_chi(bot, telegram
 
 def test_se_lo_stop_non_riesce_la_ripresa_si_ferma_al_messaggio(bot, telegram, store, orologio, caplog):
     vecchio = sondaggio_con_tre_voti(bot, telegram, store)
-    telegram.guasti["ferma_sondaggio"] = telegram_guasto()
+    telegram.guasti["ferma_sondaggio"] = telegram_guasto("ferma_sondaggio")
     with caplog.at_level(logging.ERROR):
         dopo_il_buio(bot, orologio)
     assert "ripresa dopo il buio non riuscita" in caplog.text

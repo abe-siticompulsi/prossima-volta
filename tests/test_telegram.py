@@ -6,6 +6,7 @@ import pytest
 from prossima.telegram import (
     BotTelegram,
     MessaggioSparito,
+    SondaggioGiaChiuso,
     SondaggioMandato,
     TelegramError,
     TelegramRifiuto,
@@ -124,11 +125,19 @@ def test_ferma_sondaggio_di_un_messaggio_cancellato():
         bot.ferma_sondaggio(-100, 501)
 
 
-def test_ferma_sondaggio_rifiutato_per_un_altro_motivo_non_e_sparito():
+def test_ferma_sondaggio_gia_chiuso():
+    bot = bot_con(lambda r: rifiuto(400, "Bad Request: poll has already been closed"))
+    with pytest.raises(SondaggioGiaChiuso, match="stopPoll: Bad Request: poll has already") as errore:
+        bot.ferma_sondaggio(-100, 501)
+    assert isinstance(errore.value, TelegramRifiuto)
+    assert not isinstance(errore.value, MessaggioSparito)
+
+
+def test_ferma_sondaggio_rifiutato_per_un_altro_motivo_non_e_sparito_ne_chiuso():
     bot = bot_con(lambda r: rifiuto(400, "Bad Request: chat not found"))
     with pytest.raises(TelegramRifiuto) as errore:
         bot.ferma_sondaggio(-100, 501)
-    assert not isinstance(errore.value, MessaggioSparito)
+    assert not isinstance(errore.value, MessaggioSparito | SondaggioGiaChiuso)
 
 
 def test_registra_comandi():

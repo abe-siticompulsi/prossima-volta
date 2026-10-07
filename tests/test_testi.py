@@ -1,5 +1,5 @@
 import random
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -119,16 +119,73 @@ def test_annuncio_sceglie_il_testo_e_menziona_chi_chiude_dal_roster():
         ),
         (regole.DataPassata("3/10"), "La data 3/10 è già passata."),
         (regole.TroppeDate(), "Troppe date: al massimo 10."),
-        (regole.NonNelSondaggio("15/10"), "La data 15/10 non era nel sondaggio."),
     ],
 )
 def test_i_rifiuti(rifiuto, testo):
     assert testi.rifiuto(rifiuto) == testi.Testo(testo)
 
 
+@pytest.mark.parametrize(
+    "rifiuto, testo",
+    [
+        (
+            regole.NonCapisco("boh"),
+            "Non capisco «boh»: scrivi una data del sondaggio (14/10), il suo giorno (mar) o rimanda.",
+        ),
+        (regole.NonNelSondaggio("15/10"), "La data 15/10 non era nel sondaggio."),
+        (regole.GiornoAmbiguo(1, d("14/10")), "Nel sondaggio c'è più di un martedì: scrivi la data (14/10)."),
+        (regole.GiornoAssente(4), "Nel sondaggio non c'è nessun venerdì."),
+    ],
+)
+def test_i_rifiuti_di_chiudi(rifiuto, testo):
+    assert testi.rifiuto_di_chiudi(rifiuto) == testi.Testo(testo)
+
+
+def test_i_giorni_dei_rifiuti_di_chiudi_con_l_articolo_giusto():
+    lunedi = d("13/10")
+    ambigui = [testi.rifiuto_di_chiudi(regole.GiornoAmbiguo(g, lunedi + timedelta(days=g))).testo for g in range(7)]
+    assert [t.split(":")[0] for t in ambigui] == [
+        "Nel sondaggio c'è più di un lunedì",
+        "Nel sondaggio c'è più di un martedì",
+        "Nel sondaggio c'è più di un mercoledì",
+        "Nel sondaggio c'è più di un giovedì",
+        "Nel sondaggio c'è più di un venerdì",
+        "Nel sondaggio c'è più di un sabato",
+        "Nel sondaggio c'è più di una domenica",
+    ]
+    assert ambigui[6] == "Nel sondaggio c'è più di una domenica: scrivi la data (19/10)."
+    assert [testi.rifiuto_di_chiudi(regole.GiornoAssente(g)).testo for g in range(7)] == [
+        "Nel sondaggio non c'è nessun lunedì.",
+        "Nel sondaggio non c'è nessun martedì.",
+        "Nel sondaggio non c'è nessun mercoledì.",
+        "Nel sondaggio non c'è nessun giovedì.",
+        "Nel sondaggio non c'è nessun venerdì.",
+        "Nel sondaggio non c'è nessun sabato.",
+        "Nel sondaggio non c'è nessuna domenica.",
+    ]
+
+
 def test_le_risposte_ai_comandi():
     assert testi.gia_aperto(NOME) == testi.Testo(
         "C'è già un sondaggio aperto: chiudilo prima con /chiudi@ProssimaVoltaBot."
+    )
+    assert testi.sondaggio_non_confermato(NOME, []) == testi.Testo(
+        "Telegram non ha confermato il sondaggio: se non lo vedete, riprovate con:\n"
+        "/sondaggio@ProssimaVoltaBot"
+    )
+    assert testi.sondaggio_non_confermato(NOME, ["21/10", "23/10"]) == testi.Testo(
+        "Telegram non ha confermato il sondaggio: se non lo vedete, riprovate con:\n"
+        "/sondaggio@ProssimaVoltaBot 21/10 23/10"
+    )
+    assert testi.voto_sconosciuto(NOME) == testi.Testo(
+        "Ho ricevuto un voto per un sondaggio che non conosco: "
+        "forse quello che Telegram non mi ha confermato. "
+        "Rilanciate /sondaggio@ProssimaVoltaBot e votate lì."
+    )
+    assert testi.voto_sconosciuto(NOME, con_sondaggio_aperto=True) == testi.Testo(
+        "Ho ricevuto un voto per un sondaggio che non conosco: "
+        "forse quello che Telegram non mi ha confermato. "
+        "Il sondaggio che conto è questo: votate qui."
     )
     assert testi.solo_chi_chiude((GIO, ABE)) == testi.Testo("Il sondaggio lo chiudono gio o abe.")
     assert testi.solo_chi_chiude((GIO, ABE, EMI)) == testi.Testo(
@@ -145,7 +202,18 @@ def test_le_risposte_ai_comandi():
     assert testi.rimandiamo(d("20/10")) == testi.Testo(
         "🔁 Rimandiamo: nuovo sondaggio sulla settimana del 20/10."
     )
+    assert testi.rimando_non_confermato(NOME, [d("21/10"), d("23/10")]) == testi.Testo(
+        "🔒 Sondaggio chiuso. Telegram non ha confermato il sondaggio nuovo: "
+        "se non lo vedete, lanciatelo con:\n/sondaggio@ProssimaVoltaBot 21/10 23/10"
+    )
     assert testi.sparito() == testi.Testo("Il messaggio del sondaggio non c'è più: lo considero chiuso.")
+    assert testi.chiusura_non_confermata() == testi.Testo(
+        "Telegram non ha confermato la chiusura del sondaggio: riprovo da solo."
+    )
+    assert testi.non_ancora_chiuso() == testi.Testo(
+        "Il sondaggio di prima non è ancora chiuso: Telegram non ha confermato la chiusura. "
+        "Riprovate fra poco."
+    )
 
 
 def test_il_buio_con_le_ore_di_zurigo():

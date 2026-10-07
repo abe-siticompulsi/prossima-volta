@@ -62,6 +62,9 @@ CREATE TABLE IF NOT EXISTS valori (
 
 CHIAVE_OFFSET = "offset_bot"
 CHIAVE_LETTURA = "ultima_lettura"
+CHIAVE_NON_CONFERMATO = "sondaggio_non_confermato"
+CHIAVE_CHIUSURA = "chiusura_sospesa"
+CHIAVE_SCONOSCIUTI = "sondaggi_sconosciuti_avvisati"
 
 
 @dataclass(frozen=True)
@@ -84,6 +87,27 @@ class Lettera:
     testo: str
     entita: tuple[dict, ...]
     risposta_a: int | None
+
+
+@dataclass(frozen=True)
+class LetteraNuova:
+    """Un messaggio da accodare insieme al cambio di stato che lo giustifica:
+    nella stessa transazione, così un processo ucciso a metà non lo perde."""
+
+    chat_id: int
+    testo: str
+    entita: tuple[dict, ...] = ()
+    risposta_a: int | None = None
+
+
+@dataclass(frozen=True)
+class ChiusuraSospesa:
+    """Un `/chiudi` di cui Telegram non ha confermato lo stop: il bot lo
+    ritenta, e quando Telegram risponde chiude come chiedeva il comando."""
+
+    sondaggio: int
+    comando: int  # il messaggio del /chiudi: sarà `chiuso_da`
+    argomento: str | None  # None, «rimanda», o la data tenuta (ISO, «2025-10-14»)
 
 
 def _iso(momento: datetime) -> str:
@@ -142,6 +166,66 @@ def _fatti(testo: str) -> Fatti:
     )
 
 
+def _apri(
+    c: sqlite3.Connection,
+    date_: Sequence[date],
+    poll_id: str,
+    messaggio: int,
+    frase: str,
+    alle: datetime,
+) -> int:
+    return c.execute(
+        "INSERT INTO sondaggi (date, poll_id, messaggio, frase, aperto_alle) VALUES (?, ?, ?, ?, ?)",
+        (_giorni_json(date_), poll_id, messaggio, frase, _iso(alle)),
+    ).lastrowid
+
+
+def _chiudi(c: sqlite3.Connection, sondaggio_id: int, alle: datetime, comando: int | None) -> bool:
+    """Chiude il sondaggio, e con lui la sua chiusura in sospeso, se c'è: un
+    sondaggio chiuso non ha niente da chiudere."""
+    cursore = c.execute(
+        "UPDATE sondaggi SET chiuso_alle = ?, chiuso_da = ? WHERE id = ? AND chiuso_alle IS NULL",
+        (_iso(alle), comando, sondaggio_id),
+    )
+    if cursore.rowcount != 1:
+        return False
+    sospesa = _leggi_valore(c, CHIAVE_CHIUSURA)
+    if sospesa is not None and json.loads(sospesa)["sondaggio"] == sondaggio_id:
+        c.execute("DELETE FROM valori WHERE chiave = ?", (CHIAVE_CHIUSURA,))
+    return True
+
+
+def _leggi_valore(c: sqlite3.Connection, chiave: str) -> str | None:
+    riga = c.execute("SELECT valore FROM valori WHERE chiave = ?", (chiave,)).fetchone()
+    return None if riga is None else riga["valore"]
+
+
+def _scrivi_valore(c: sqlite3.Connection, chiave: str, valore: str) -> None:
+    c.execute(
+        "INSERT INTO valori (chiave, valore) VALUES (?, ?) "
+        "ON CONFLICT (chiave) DO UPDATE SET valore = excluded.valore",
+        (chiave, valore),
+    )
+
+
+def _accoda(c: sqlite3.Connection, lettere: Sequence[LetteraNuova], alle: datetime) -> list[int]:
+    """Accoda le `lettere` nella transazione di `c`; restituisce i loro id."""
+    return [
+        c.execute(
+            "INSERT INTO posta (chat_id, testo, entita, risposta_a, creata_alle) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                lettera.chat_id,
+                lettera.testo,
+                json.dumps(list(lettera.entita), ensure_ascii=False),
+                lettera.risposta_a,
+                _iso(alle),
+            ),
+        ).lastrowid
+        for lettera in lettere
+    ]
+
+
 class Store:
     def __init__(self, percorso: Path | str) -> None:
         self._percorso = str(percorso)
@@ -179,25 +263,118 @@ class Store:
     ) -> Sondaggio:
         """Con un sondaggio già aperto solleva `sqlite3.IntegrityError`."""
         with self._connessione() as c:
-            cursore = c.execute(
-                "INSERT INTO sondaggi (date, poll_id, messaggio, frase, aperto_alle) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (_giorni_json(date_), poll_id, messaggio, frase, _iso(alle)),
-            )
-            nuovo = cursore.lastrowid
+            nuovo = _apri(c, date_, poll_id, messaggio, frase, alle)
         return self.sondaggio(nuovo)
 
-    def chiudi_sondaggio(self, sondaggio_id: int, alle: datetime, comando: int | None = None) -> bool:
+    def chiudi_sondaggio(
+        self,
+        sondaggio_id: int,
+        alle: datetime,
+        comando: int | None = None,
+        lettere: Sequence[LetteraNuova] = (),
+        non_confermato: bool = False,
+    ) -> bool:
         """Vero se l'ha chiuso questa chiamata. `comando` è il messaggio del
         `/chiudi` che lo chiude: lo stesso comando letto due volte non chiude il
-        sondaggio seguente."""
+        sondaggio seguente. Le `lettere` che dicono la chiusura si accodano
+        nella stessa transazione, e solo se questa chiamata l'ha chiuso; con
+        `non_confermato`, anche il sondaggio nuovo di `rimanda` che Telegram
+        non ha confermato si ricorda lì (v. `segna_non_confermato`)."""
         with self._connessione() as c:
-            cursore = c.execute(
-                "UPDATE sondaggi SET chiuso_alle = ?, chiuso_da = ? "
-                "WHERE id = ? AND chiuso_alle IS NULL",
-                (_iso(alle), comando, sondaggio_id),
+            chiuso = _chiudi(c, sondaggio_id, alle, comando)
+            if chiuso:
+                _accoda(c, lettere, alle)
+                if non_confermato:
+                    _scrivi_valore(c, CHIAVE_NON_CONFERMATO, _iso(alle))
+        return chiuso
+
+    def rimanda(
+        self,
+        vecchio_id: int,
+        comando: int,
+        date_: Sequence[date],
+        poll_id: str,
+        messaggio: int,
+        frase: str,
+        alle: datetime,
+        lettere: Sequence[LetteraNuova] = (),
+    ) -> Sondaggio:
+        """`/chiudi rimanda` in una transazione: chiude il vecchio con il
+        comando, apre il nuovo (dopo: l'indice vuole un solo aperto) e accoda le
+        `lettere`. A metà non resta niente: il vecchio è ancora aperto. Se il
+        vecchio non è aperto solleva `ValueError`, e non apre niente."""
+        with self._connessione() as c:
+            if not _chiudi(c, vecchio_id, alle, comando):
+                raise ValueError(f"rimanda: il sondaggio {vecchio_id} non è aperto")
+            nuovo = _apri(c, date_, poll_id, messaggio, frase, alle)
+            _accoda(c, lettere, alle)
+        return self.sondaggio(nuovo)
+
+    def poll_conosciuto(self, poll_id: str) -> bool:
+        """Un sondaggio di Telegram che il bot ha registrato: quello di un
+        sondaggio, o quello in cui qualcuno ha votato (prima di una ripresa)."""
+        with self._connessione() as c:
+            riga = c.execute(
+                "SELECT 1 FROM sondaggi WHERE poll_id = ? "
+                "UNION ALL SELECT 1 FROM voti WHERE poll_id = ? LIMIT 1",
+                (poll_id, poll_id),
+            ).fetchone()
+        return riga is not None
+
+    def sospendi_chiusura(
+        self, sospesa: ChiusuraSospesa, alle: datetime, lettere: Sequence[LetteraNuova] = ()
+    ) -> None:
+        """Ricorda la chiusura in sospeso (vale l'ultima) e accoda le `lettere`,
+        nella stessa transazione. La toglie la chiusura del sondaggio."""
+        with self._connessione() as c:
+            _scrivi_valore(
+                c,
+                CHIAVE_CHIUSURA,
+                json.dumps(
+                    {
+                        "sondaggio": sospesa.sondaggio,
+                        "comando": sospesa.comando,
+                        "argomento": sospesa.argomento,
+                    }
+                ),
             )
-        return cursore.rowcount == 1
+            _accoda(c, lettere, alle)
+
+    def chiusura_sospesa(self) -> ChiusuraSospesa | None:
+        salvata = self.leggi_valore(CHIAVE_CHIUSURA)
+        if salvata is None:
+            return None
+        dati = json.loads(salvata)
+        return ChiusuraSospesa(dati["sondaggio"], dati["comando"], dati["argomento"])
+
+    def togli_chiusura_sospesa(self) -> None:
+        with self._connessione() as c:
+            c.execute("DELETE FROM valori WHERE chiave = ?", (CHIAVE_CHIUSURA,))
+
+    def segna_non_confermato(self, alle: datetime, lettere: Sequence[LetteraNuova] = ()) -> None:
+        """Ricorda il momento di un sondaggio che Telegram non ha confermato,
+        e che forse è partito (vale l'ultimo); accoda le `lettere` nella
+        stessa transazione."""
+        with self._connessione() as c:
+            _scrivi_valore(c, CHIAVE_NON_CONFERMATO, _iso(alle))
+            _accoda(c, lettere, alle)
+
+    def ultimo_non_confermato(self) -> datetime | None:
+        salvato = self.leggi_valore(CHIAVE_NON_CONFERMATO)
+        return None if salvato is None else datetime.fromisoformat(salvato)
+
+    def avvisa_voto_sconosciuto(
+        self, poll_id: str, alle: datetime, lettere: Sequence[LetteraNuova]
+    ) -> bool:
+        """La prima volta per `poll_id` accoda le `lettere` e lo ricorda, nella
+        stessa transazione; vero se le ha accodate."""
+        with self._connessione() as c:
+            avvisati = json.loads(_leggi_valore(c, CHIAVE_SCONOSCIUTI) or "[]")
+            if poll_id in avvisati:
+                return False
+            _scrivi_valore(c, CHIAVE_SCONOSCIUTI, json.dumps([*avvisati, poll_id]))
+            _accoda(c, lettere, alle)
+        return True
 
     def chiuso_dal_comando(self, comando: int) -> bool:
         with self._connessione() as c:
@@ -272,13 +449,18 @@ class Store:
         with self._connessione() as c:
             return {r["frase"] for r in c.execute("SELECT frase FROM frasi_usate")}
 
-    def usa_frase(self, frase: str) -> None:
+    def ultima_frase(self) -> str | None:
+        """L'ultima frase usata nel giro di adesso."""
         with self._connessione() as c:
-            c.execute("INSERT OR IGNORE INTO frasi_usate (frase) VALUES (?)", (frase,))
+            riga = c.execute("SELECT frase FROM frasi_usate ORDER BY rowid DESC LIMIT 1").fetchone()
+        return None if riga is None else riga["frase"]
 
-    def dimentica_frasi(self) -> None:
+    def usa_frase(self, frase: str, nuovo_giro: bool = False) -> None:
+        """Con `nuovo_giro`, prima dimentica le frasi del giro finito."""
         with self._connessione() as c:
-            c.execute("DELETE FROM frasi_usate")
+            if nuovo_giro:
+                c.execute("DELETE FROM frasi_usate")
+            c.execute("INSERT OR IGNORE INTO frasi_usate (frase) VALUES (?)", (frase,))
 
     # --- posta in uscita
 
@@ -291,12 +473,8 @@ class Store:
         alle: datetime,
     ) -> int:
         with self._connessione() as c:
-            cursore = c.execute(
-                "INSERT INTO posta (chat_id, testo, entita, risposta_a, creata_alle) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (chat_id, testo, json.dumps(list(entita), ensure_ascii=False), risposta_a, _iso(alle)),
-            )
-            return cursore.lastrowid
+            [nuova] = _accoda(c, [LetteraNuova(chat_id, testo, tuple(entita), risposta_a)], alle)
+        return nuova
 
     def posta(self) -> list[Lettera]:
         """In ordine di arrivo."""
@@ -315,16 +493,11 @@ class Store:
 
     def leggi_valore(self, chiave: str) -> str | None:
         with self._connessione() as c:
-            riga = c.execute("SELECT valore FROM valori WHERE chiave = ?", (chiave,)).fetchone()
-        return None if riga is None else riga["valore"]
+            return _leggi_valore(c, chiave)
 
     def scrivi_valore(self, chiave: str, valore: str) -> None:
         with self._connessione() as c:
-            c.execute(
-                "INSERT INTO valori (chiave, valore) VALUES (?, ?) "
-                "ON CONFLICT (chiave) DO UPDATE SET valore = excluded.valore",
-                (chiave, valore),
-            )
+            _scrivi_valore(c, chiave, valore)
 
     def offset(self) -> int | None:
         salvato = self.leggi_valore(CHIAVE_OFFSET)

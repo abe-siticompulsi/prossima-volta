@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from prossima.regole import Fatti, Voto
-from prossima.store import Lettera, Sondaggio, Store
+from prossima.store import ChiusuraSospesa, Lettera, LetteraNuova, Sondaggio, Store
 from tests.tavolo import ESTRANEO, GIO, d
 
 ALLE = datetime(2025, 10, 7, 18, 0, tzinfo=UTC)
@@ -54,6 +54,82 @@ def test_chiudere_una_volta_sola_e_ricordare_il_comando(store):
     assert not store.chiuso_dal_comando(778)
     # chiuso, se ne apre un altro
     assert apri(store, poll_id="poll-2", messaggio=502).id != s.id
+
+
+def test_la_lettera_della_chiusura_si_accoda_con_la_chiusura(store):
+    s = apri(store)
+    chiuso = LetteraNuova(-100, "🔒 Sondaggio chiuso.", risposta_a=42)
+    assert store.chiudi_sondaggio(s.id, ALLE, comando=777, lettere=[chiuso])
+    assert [(x.chat_id, x.testo, x.entita, x.risposta_a) for x in store.posta()] == [
+        (-100, "🔒 Sondaggio chiuso.", (), 42)
+    ]
+    # già chiuso: questa chiamata non chiude niente, e non lo dice
+    assert not store.chiudi_sondaggio(s.id, ALLE, comando=778, lettere=[chiuso])
+    assert len(store.posta()) == 1
+
+
+def test_rimandare_chiude_apre_e_accoda_in_una_transazione(store):
+    vecchio = apri(store)
+    rimandiamo = LetteraNuova(-100, "🔁 Rimandiamo")
+    nuovo = store.rimanda(
+        vecchio.id, 777, (d("21/10"),), "poll-2", 502, "Nessuna: x", ALLE, [rimandiamo]
+    )
+    assert store.sondaggio(vecchio.id).chiuso_alle == ALLE
+    assert store.chiuso_dal_comando(777)
+    assert store.sondaggio_aperto() == nuovo
+    assert (nuovo.date, nuovo.poll_id, nuovo.messaggio) == ((d("21/10"),), "poll-2", 502)
+    assert [x.testo for x in store.posta()] == ["🔁 Rimandiamo"]
+
+
+def test_rimandare_un_sondaggio_gia_chiuso_non_apre_niente(store):
+    vecchio = apri(store)
+    store.chiudi_sondaggio(vecchio.id, ALLE, 776)
+    with pytest.raises(ValueError, match="non è aperto"):
+        store.rimanda(vecchio.id, 777, (d("21/10"),), "poll-2", 502, "Nessuna: x", ALLE)
+    assert store.sondaggio_aperto() is None
+    assert not store.chiuso_dal_comando(777)
+
+
+def test_rimandare_a_meta_non_lascia_niente(store):
+    vecchio = apri(store)
+    rotta = LetteraNuova(-100, "x", entita=({"non": object()},))  # non si scrive in JSON
+    with pytest.raises(TypeError):
+        store.rimanda(vecchio.id, 777, (d("21/10"),), "poll-2", 502, "Nessuna: x", ALLE, [rotta])
+    assert store.sondaggio_aperto() == vecchio
+    assert not store.chiuso_dal_comando(777)
+    assert store.posta() == []
+
+
+def test_la_chiusura_in_sospeso_si_ricorda_con_la_risposta(store):
+    s = apri(store)
+    assert store.chiusura_sospesa() is None
+    risposta = LetteraNuova(-100, "riprovo da solo", risposta_a=777)
+    store.sospendi_chiusura(ChiusuraSospesa(s.id, 777, None), ALLE, [risposta])
+    assert store.chiusura_sospesa() == ChiusuraSospesa(s.id, 777, None)
+    assert [(x.testo, x.risposta_a) for x in store.posta()] == [("riprovo da solo", 777)]
+    # vale l'ultima decisione
+    store.sospendi_chiusura(ChiusuraSospesa(s.id, 778, "rimanda"), ALLE)
+    assert store.chiusura_sospesa() == ChiusuraSospesa(s.id, 778, "rimanda")
+    store.togli_chiusura_sospesa()
+    assert store.chiusura_sospesa() is None
+
+
+@pytest.mark.parametrize("modo", ["chiudi", "rimanda"])
+def test_chiudere_il_sondaggio_toglie_la_sua_chiusura_in_sospeso(store, modo):
+    s = apri(store)
+    store.sospendi_chiusura(ChiusuraSospesa(s.id, 777, None), ALLE)
+    if modo == "chiudi":
+        store.chiudi_sondaggio(s.id, ALLE, 777)
+    else:
+        store.rimanda(s.id, 777, (d("21/10"),), "poll-2", 502, "Nessuna: x", ALLE)
+    assert store.chiusura_sospesa() is None
+
+
+def test_chiudere_un_altro_sondaggio_lascia_la_chiusura_in_sospeso(store):
+    s = apri(store)
+    store.sospendi_chiusura(ChiusuraSospesa(s.id + 1, 777, None), ALLE)
+    store.chiudi_sondaggio(s.id, ALLE)
+    assert store.chiusura_sospesa() == ChiusuraSospesa(s.id + 1, 777, None)
 
 
 def test_riaprire_cambia_il_messaggio_e_tiene_voti_e_fatti(store):
@@ -109,12 +185,15 @@ def test_i_fatti_tornano_come_sono_stati_salvati(store):
 
 def test_le_frasi_usate(store):
     assert store.frasi_usate() == set()
-    store.usa_frase("Nessuna: a")
-    store.usa_frase("Nessuna: a")
+    assert store.ultima_frase() is None
     store.usa_frase("Nessuna: b")
+    store.usa_frase("Nessuna: a")
+    store.usa_frase("Nessuna: a")
     assert store.frasi_usate() == {"Nessuna: a", "Nessuna: b"}
-    store.dimentica_frasi()
-    assert store.frasi_usate() == set()
+    assert store.ultima_frase() == "Nessuna: a"
+    store.usa_frase("Nessuna: c", nuovo_giro=True)
+    assert store.frasi_usate() == {"Nessuna: c"}
+    assert store.ultima_frase() == "Nessuna: c"
 
 
 def test_la_posta_in_ordine_di_arrivo(store):
@@ -127,6 +206,45 @@ def test_la_posta_in_ordine_di_arrivo(store):
     ]
     store.togli_lettera(primo)
     assert [lettera.id for lettera in store.posta()] == [secondo]
+
+
+def test_il_sondaggio_non_confermato_si_ricorda_con_la_risposta(store):
+    assert store.ultimo_non_confermato() is None
+    risposta = LetteraNuova(-100, "Telegram non ha confermato il sondaggio", risposta_a=42)
+    store.segna_non_confermato(ALLE, [risposta])
+    assert store.ultimo_non_confermato() == ALLE
+    assert [(x.testo, x.risposta_a) for x in store.posta()] == [
+        ("Telegram non ha confermato il sondaggio", 42)
+    ]
+    # vale l'ultimo
+    store.segna_non_confermato(ALLE + timedelta(days=1))
+    assert store.ultimo_non_confermato() == ALLE + timedelta(days=1)
+
+
+def test_chiudere_e_ricordare_un_sondaggio_non_confermato_insieme(store):
+    s = apri(store)
+    chiuso = LetteraNuova(-100, "🔒 Sondaggio chiuso. Telegram non ha confermato il sondaggio nuovo")
+    assert store.chiudi_sondaggio(s.id, ALLE, 777, [chiuso], non_confermato=True)
+    assert store.ultimo_non_confermato() == ALLE
+    assert [x.testo for x in store.posta()] == [chiuso.testo]
+
+
+def test_un_sondaggio_sconosciuto_si_avvisa_una_volta(store):
+    avviso = LetteraNuova(-100, "Ho ricevuto un voto per un sondaggio che non conosco")
+    assert store.avvisa_voto_sconosciuto("poll-x", ALLE, [avviso])
+    assert not store.avvisa_voto_sconosciuto("poll-x", ALLE, [avviso])
+    assert store.avvisa_voto_sconosciuto("poll-y", ALLE, [avviso])
+    assert len(store.posta()) == 2
+
+
+def test_i_sondaggi_conosciuti(store):
+    s = apri(store, poll_id="poll-1")
+    store.registra_voto(s.id, GIO.telegram_id, "poll-1", Voto(frozenset({d("14/10")})), ALLE)
+    store.chiudi_sondaggio(s.id, ALLE)
+    store.riapri_sondaggio(s.id, DATE, "poll-2", 502, "Nessuna: x")
+    assert store.poll_conosciuto("poll-2")
+    assert store.poll_conosciuto("poll-1")  # quello di prima della ripresa, nei voti
+    assert not store.poll_conosciuto("poll-3")
 
 
 def test_offset_e_ultima_lettura(store):

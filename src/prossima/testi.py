@@ -176,6 +176,7 @@ def annuncio(a: regole.Annuncio, roster: regole.Roster, nome_bot: str) -> Testo:
 
 
 def rifiuto(r: regole.Rifiuto) -> Testo:
+    """I rifiuti di `/sondaggio`."""
     match r:
         case regole.NonCapisco():
             return Testo(
@@ -185,13 +186,61 @@ def rifiuto(r: regole.Rifiuto) -> Testo:
             return Testo(f"La data {r.scritta} è già passata.")
         case regole.TroppeDate():
             return Testo(f"Troppe date: al massimo {regole.MASSIMO_DATE}.")
+    raise TypeError(f"rifiuto sconosciuto: {r!r}")
+
+
+def _con_articolo(giorno: int, maschile: str, femminile: str) -> str:
+    """«più di un martedì», «più di una domenica»: domenica è l'unico femminile."""
+    return f"{femminile if giorno == 6 else maschile} {regole.GIORNI_INTERI[giorno]}"
+
+
+def rifiuto_di_chiudi(r: regole.Rifiuto) -> Testo:
+    """I rifiuti di `/chiudi <argomento>`."""
+    match r:
+        case regole.NonCapisco():
+            return Testo(
+                f"Non capisco «{r.parola}»: "
+                "scrivi una data del sondaggio (14/10), il suo giorno (mar) o rimanda."
+            )
         case regole.NonNelSondaggio():
             return Testo(f"La data {r.scritta} non era nel sondaggio.")
+        case regole.GiornoAmbiguo():
+            return Testo(
+                f"Nel sondaggio c'è {_con_articolo(r.giorno, 'più di un', 'più di una')}: "
+                f"scrivi la data ({regole.breve(r.prima_data)})."
+            )
+        case regole.GiornoAssente():
+            return Testo(f"Nel sondaggio non c'è {_con_articolo(r.giorno, 'nessun', 'nessuna')}.")
     raise TypeError(f"rifiuto sconosciuto: {r!r}")
 
 
 def gia_aperto(nome_bot: str) -> Testo:
     return Testo(f"C'è già un sondaggio aperto: chiudilo prima con /chiudi@{nome_bot}.")
+
+
+def _riga_di_comando(comando: str, argomenti: Sequence[str]) -> str:
+    """Un comando da copiare: va da solo sull'ultima riga del messaggio, senza
+    niente dopo (un punto finale si copierebbe con l'ultima data)."""
+    return " ".join([comando, *argomenti])
+
+
+def sondaggio_non_confermato(nome_bot: str, argomenti: Sequence[str]) -> Testo:
+    """`argomenti`: quelli del comando, come li ha scritti chi l'ha lanciato."""
+    return Testo(
+        "Telegram non ha confermato il sondaggio: se non lo vedete, riprovate con:\n"
+        + _riga_di_comando(f"/sondaggio@{nome_bot}", argomenti)
+    )
+
+
+def voto_sconosciuto(nome_bot: str, con_sondaggio_aperto: bool = False) -> Testo:
+    """Con un sondaggio aperto il messaggio risponde a quello: «questo»."""
+    inizio = (
+        "Ho ricevuto un voto per un sondaggio che non conosco: "
+        "forse quello che Telegram non mi ha confermato. "
+    )
+    if con_sondaggio_aperto:
+        return Testo(inizio + "Il sondaggio che conto è questo: votate qui.")
+    return Testo(inizio + f"Rilanciate /sondaggio@{nome_bot} e votate lì.")
 
 
 def solo_chi_chiude(chiude: Sequence[Persona]) -> Testo:
@@ -218,8 +267,28 @@ def rimandiamo(lunedi: date) -> Testo:
     return Testo(f"🔁 Rimandiamo: nuovo sondaggio sulla settimana del {regole.breve(lunedi)}.")
 
 
+def rimando_non_confermato(nome_bot: str, date_: Sequence[date]) -> Testo:
+    """Le date sono quelle del sondaggio nuovo, `g/m`: il comando da copiare."""
+    return Testo(
+        "🔒 Sondaggio chiuso. Telegram non ha confermato il sondaggio nuovo: "
+        "se non lo vedete, lanciatelo con:\n"
+        + _riga_di_comando(f"/sondaggio@{nome_bot}", [regole.breve(g) for g in date_])
+    )
+
+
 def sparito() -> Testo:
     return Testo("Il messaggio del sondaggio non c'è più: lo considero chiuso.")
+
+
+def chiusura_non_confermata() -> Testo:
+    return Testo("Telegram non ha confermato la chiusura del sondaggio: riprovo da solo.")
+
+
+def non_ancora_chiuso() -> Testo:
+    return Testo(
+        "Il sondaggio di prima non è ancora chiuso: Telegram non ha confermato la chiusura. "
+        "Riprovate fra poco."
+    )
 
 
 # --- la ripresa dopo il buio (§3.8)

@@ -18,7 +18,7 @@ import pytest
 from prossima import regole, testi
 from prossima.bot import COMANDI
 from prossima.regole import Persona
-from prossima.telegram import BotTelegram, MessaggioSparito
+from prossima.telegram import BotTelegram, MessaggioSparito, SondaggioGiaChiuso
 from tests.reale.ambiente import richiesta
 
 pytestmark = pytest.mark.reale
@@ -105,4 +105,14 @@ def test_fermare_un_sondaggio_cancellato():
     # deleteMessage al bot non serve: qui fa la parte di chi cancella il sondaggio.
     b._chiama("deleteMessage", {"chat_id": chat(), "message_id": mandato.messaggio})
     with pytest.raises(MessaggioSparito):
+        b.ferma_sondaggio(chat(), mandato.messaggio)
+
+
+def test_fermare_due_volte():
+    """Contratto: un secondo `stopPoll` sullo stesso sondaggio risponde con una
+    descrizione che `SondaggioGiaChiuso` riconosce."""
+    b = bot()
+    mandato = b.manda_sondaggio(chat(), "🧪 Prova di Prossima volta: mi fermo due volte.", ["sì", "no"])
+    assert b.ferma_sondaggio(chat(), mandato.messaggio) == [0, 0]
+    with pytest.raises(SondaggioGiaChiuso):
         b.ferma_sondaggio(chat(), mandato.messaggio)

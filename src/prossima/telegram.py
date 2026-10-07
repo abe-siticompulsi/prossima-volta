@@ -10,8 +10,8 @@ scriverebbe ogni URL, token compreso.
 Gli errori dicono a chi li riceve se ripetere serve:
 - `TelegramTroppeRichieste` (429): sì, ma non prima di `retry_after` secondi;
 - `TelegramRifiuto` (gli altri 4xx): no, la stessa richiesta verrà rifiutata
-  di nuovo; `MessaggioSparito` è il rifiuto di `stopPoll` per un messaggio
-  cancellato;
+  di nuovo; `MessaggioSparito` e `SondaggioGiaChiuso` sono i rifiuti di
+  `stopPoll` per un messaggio cancellato e per un sondaggio già fermato;
 - `TelegramError` (rete, 5xx, risposta non JSON): sì, al giro seguente.
 
 Nessuna chiamata usa `parse_mode`: i testi sono semplici, e le menzioni sono
@@ -29,6 +29,8 @@ import httpx
 
 # Telegram descrive un messaggio che non c'è più come «message to … not found».
 _SPARITO = re.compile(r"message[^:]*not found|MESSAGE_ID_INVALID", re.IGNORECASE)
+# e un sondaggio fermato una seconda volta come «poll has already been closed».
+_GIA_CHIUSO = re.compile(r"poll[^:]*already[^:]*closed", re.IGNORECASE)
 
 
 class TelegramError(RuntimeError):
@@ -41,6 +43,11 @@ class TelegramRifiuto(TelegramError):
 
 class MessaggioSparito(TelegramRifiuto):
     """Il messaggio del sondaggio non c'è più: è stato cancellato."""
+
+
+class SondaggioGiaChiuso(TelegramRifiuto):
+    """Il sondaggio era già fermo: uno `stopPoll` precedente è passato, anche
+    se la sua risposta non è arrivata. Telegram non ridà i conteggi."""
 
 
 class TelegramTroppeRichieste(TelegramError):
@@ -140,6 +147,8 @@ class BotTelegram:
         except TelegramRifiuto as e:
             if _SPARITO.search(str(e)):
                 raise MessaggioSparito(str(e)) from None
+            if _GIA_CHIUSO.search(str(e)):
+                raise SondaggioGiaChiuso(str(e)) from None
             raise
         return [opzione["voter_count"] for opzione in sondaggio["options"]]
 

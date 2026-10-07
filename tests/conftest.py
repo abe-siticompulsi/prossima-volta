@@ -32,15 +32,64 @@ def telegram():
 
 
 @pytest.fixture
-def bot(telegram, store, orologio):
-    # `caso` sceglie sempre la prima frase restante: le prove sanno quale arriva.
-    return Bot(
-        telegram=telegram,
-        store=store,
-        roster=ROSTER,
-        gruppo=GRUPPO,
-        nome=NOME,
-        fuso=ZURIGO,
-        adesso=orologio,
-        caso=lambda restanti: restanti[0],
-    )
+def riavvia(telegram, store, orologio):
+    """Un bot nuovo sugli stessi Telegram, database e orologio: il processo
+    ripartito. `caso` sceglie sempre la prima frase restante: le prove sanno
+    quale arriva."""
+
+    def nuovo() -> Bot:
+        return Bot(
+            telegram=telegram,
+            store=store,
+            roster=ROSTER,
+            gruppo=GRUPPO,
+            nome=NOME,
+            fuso=ZURIGO,
+            adesso=orologio,
+            caso=lambda restanti: restanti[0],
+        )
+
+    return nuovo
+
+
+@pytest.fixture
+def bot(riavvia):
+    return riavvia()
+
+
+class Ucciso(BaseException):
+    """Il processo ucciso a metà: nessun `except Exception` del bot lo ferma."""
+
+
+_ASSENTE = object()
+
+
+@pytest.fixture
+def uccidi():
+    """`uccidi(oggetto, "metodo")`: il processo muore quando arriva a quel
+    metodo, prima che faccia niente; con `dopo=True`, appena il metodo ha
+    finito. `uccidi.basta()` rimette i metodi uccisi, e solo quelli."""
+    uccisi: list[tuple[object, str, object]] = []
+
+    def uccidi(oggetto, metodo: str, dopo: bool = False) -> None:
+        vero = getattr(oggetto, metodo)
+
+        def muore(*argomenti, **chiavi):
+            if dopo:
+                vero(*argomenti, **chiavi)
+            raise Ucciso(metodo)
+
+        uccisi.append((oggetto, metodo, vars(oggetto).get(metodo, _ASSENTE)))
+        setattr(oggetto, metodo, muore)
+
+    def basta() -> None:
+        while uccisi:
+            oggetto, metodo, prima = uccisi.pop()
+            if prima is _ASSENTE:
+                delattr(oggetto, metodo)
+            else:
+                setattr(oggetto, metodo, prima)
+
+    uccidi.basta = basta
+    yield uccidi
+    basta()

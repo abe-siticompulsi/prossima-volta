@@ -46,7 +46,24 @@ class TroppeDate(Rifiuto):
 class NonNelSondaggio(Rifiuto):
     def __init__(self, scritta: str) -> None:
         super().__init__(scritta)
-        self.scritta = scritta  # «15/10», o il giorno della settimana: «ven»
+        self.scritta = scritta  # «15/10», o «15/10/2025» se l'anno era scritto
+
+
+class GiornoAssente(Rifiuto):
+    """`/chiudi ven` senza venerdì nel sondaggio."""
+
+    def __init__(self, giorno: int) -> None:
+        super().__init__(giorno)
+        self.giorno = giorno  # come `date.weekday()`: lunedì 0
+
+
+class GiornoAmbiguo(Rifiuto):
+    """`/chiudi mar` con più di un martedì nel sondaggio: serve la data."""
+
+    def __init__(self, giorno: int, prima_data: date) -> None:
+        super().__init__(giorno, prima_data)
+        self.giorno = giorno  # come `date.weekday()`: lunedì 0
+        self.prima_data = prima_data  # la prima del sondaggio con quel giorno
 
 
 def breve(giorno: date) -> str:
@@ -62,6 +79,11 @@ def etichetta(giorno: date) -> str:
 def etichetta_intera(giorno: date) -> str:
     """«martedì 14/10»."""
     return f"{GIORNI_INTERI[giorno.weekday()]} {breve(giorno)}"
+
+
+def lunedi(giorno: date) -> date:
+    """Il lunedì della settimana di `giorno`."""
+    return giorno - timedelta(days=giorno.weekday())
 
 
 def lunedi_seguente(giorno: date) -> date:
@@ -136,11 +158,12 @@ def data_da_chiudere(parola: str, date_sondaggio: Sequence[date]) -> date:
     sondaggio ce n'è uno solo."""
     minuscola = parola.lower()
     if minuscola in GIORNI:
-        trovate = [d for d in date_sondaggio if GIORNI[d.weekday()] == minuscola]
+        giorno = GIORNI.index(minuscola)
+        trovate = sorted(d for d in date_sondaggio if d.weekday() == giorno)
         if not trovate:
-            raise NonNelSondaggio(minuscola)
+            raise GiornoAssente(giorno)
         if len(trovate) > 1:
-            raise NonCapisco(parola)
+            raise GiornoAmbiguo(giorno, trovate[0])
         return trovate[0]
     trovata = _DATA.fullmatch(parola)
     if trovata is None:

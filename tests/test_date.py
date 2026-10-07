@@ -121,7 +121,7 @@ def test_chiudere_tenendo_una_data_del_sondaggio(parola):
 
 
 @pytest.mark.parametrize(
-    "parola, scritta", [("15/10", "15/10"), ("05.10", "5/10"), ("14/10/2026", "14/10/2026"), ("Ven", "ven")]
+    "parola, scritta", [("15/10", "15/10"), ("05.10", "5/10"), ("14/10/2026", "14/10/2026")]
 )
 def test_chiudere_con_una_data_che_non_era_nel_sondaggio(parola, scritta):
     with pytest.raises(regole.NonNelSondaggio) as rifiuto:
@@ -129,15 +129,28 @@ def test_chiudere_con_una_data_che_non_era_nel_sondaggio(parola, scritta):
     assert rifiuto.value.scritta == scritta
 
 
+@pytest.mark.parametrize("parola, giorno", [("ven", 4), ("Ven", 4), ("dom", 6)])
+def test_chiudere_con_un_giorno_che_non_e_nel_sondaggio(parola, giorno):
+    with pytest.raises(regole.GiornoAssente) as rifiuto:
+        regole.data_da_chiudere(parola, SONDAGGIO)
+    assert rifiuto.value.giorno == giorno
+
+
 def test_chiudere_con_un_giorno_che_nel_sondaggio_compare_due_volte():
-    with pytest.raises(regole.NonCapisco) as rifiuto:
-        regole.data_da_chiudere("mar", [d("14/10"), d("21/10")])
-    assert rifiuto.value.parola == "mar"
+    with pytest.raises(regole.GiornoAmbiguo) as rifiuto:
+        regole.data_da_chiudere("Mar", [d("14/10"), d("16/10"), d("21/10")])
+    assert (rifiuto.value.giorno, rifiuto.value.prima_data) == (1, d("14/10"))
 
 
 def test_chiudere_con_una_parola_strana():
     with pytest.raises(regole.NonCapisco):
         regole.data_da_chiudere("boh", SONDAGGIO)
+
+
+def test_il_lunedi_della_settimana():
+    assert regole.lunedi(d("13/10")) == d("13/10")
+    assert regole.lunedi(d("16/10")) == d("13/10")
+    assert regole.lunedi(d("19/10")) == d("13/10")
 
 
 def test_rimandare_tiene_i_giorni_della_settimana_nella_settimana_dopo():
