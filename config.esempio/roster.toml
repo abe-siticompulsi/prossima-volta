@@ -1,0 +1,37 @@
+# Copia in config/roster.toml sul server e metti gli identificativi Telegram veri
+# (i numeri, non i nomi utente: quelli si cambiano). Non va mai nel repository.
+#
+# Esattamente un master. «chiude = true» per chi può chiudere il sondaggio;
+# senza, la persona non lo chiude. Il bot conta solo le persone di questo file.
+
+[[persona]]
+soprannome = "gio"
+telegram_id = 100000001
+ruolo = "master"
+chiude = true
+
+[[persona]]
+soprannome = "abe"
+telegram_id = 100000002
+ruolo = "giocatore"
+chiude = true
+
+[[persona]]
+soprannome = "emi"
+telegram_id = 100000003
+ruolo = "giocatore"
+
+[[persona]]
+soprannome = "sem"
+telegram_id = 100000004
+ruolo = "giocatore"
+
+[[persona]]
+soprannome = "sese"
+telegram_id = 100000005
+ruolo = "giocatore"
+
+[[persona]]
+soprannome = "pippo"
+telegram_id = 100000006
+ruolo = "giocatore"
