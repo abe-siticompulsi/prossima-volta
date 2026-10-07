@@ -25,6 +25,7 @@ from . import regole, testi
 from .regole import Roster
 from .store import Sondaggio, Store
 from .telegram import (
+    MessaggioSparito,
     SondaggioMandato,
     TelegramError,
     TelegramRifiuto,
@@ -100,6 +101,8 @@ class Bot:
         comando = self._comando(parole[0])
         if comando == "sondaggio":
             self._sondaggio(messaggio, parole[1:])
+        elif comando == "chiudi":
+            self._chiudi(messaggio, parole[1:])
 
     def _comando(self, parola: str) -> str | None:
         """«/sondaggio» o «/sondaggio@<nome del bot>» → «sondaggio»; un comando
@@ -131,6 +134,57 @@ class Bot:
             return
         voto = regole.voto_da_opzioni(sondaggio.date, risposta.get("option_ids", []))
         self._store.registra_voto(sondaggio.id, utente["id"], sondaggio.poll_id, voto, self._adesso())
+
+    # --- /chiudi
+
+    def _chiudi(self, messaggio: dict, parole: list[str]) -> None:
+        comando = messaggio["message_id"]
+        if self._store.chiuso_dal_comando(comando):
+            return  # lo stesso /chiudi letto una seconda volta dopo un riavvio
+        chi = self._roster.per_id(messaggio.get("from", {}).get("id"))
+        if chi is None or not chi.chiude:
+            self._accoda(testi.solo_chi_chiude(self._roster.chi_chiude), risposta_a=comando)
+            return
+        sondaggio = self._store.sondaggio_aperto()
+        if sondaggio is None:
+            self._accoda(testi.nessun_sondaggio(), risposta_a=comando)
+            return
+        if len(parole) > 1:
+            self._accoda(testi.rifiuto(regole.NonCapisco(" ".join(parole))), risposta_a=comando)
+            return
+        argomento = parole[0] if parole else None
+        rimanda = argomento is not None and argomento.lower() == regole.RIMANDA
+        tenuta = None
+        if argomento is not None and not rimanda:
+            try:
+                tenuta = regole.data_da_chiudere(argomento, sondaggio.date)
+            except regole.Rifiuto as r:
+                self._accoda(testi.rifiuto(r), risposta_a=comando)
+                return
+        stato = self._stato(sondaggio)
+        self._ferma(sondaggio, comando)
+        if rimanda:
+            date_ = regole.date_rimandate(sondaggio.date)
+            mandato, frase = self._nuovo_sondaggio(date_)
+            self._store.apri_sondaggio(date_, mandato.poll_id, mandato.messaggio, frase, self._adesso())
+            self._accoda(testi.rimandiamo(regole.lunedi_seguente(max(sondaggio.date))))
+        elif tenuta is not None:
+            self._accoda(testi.si_gioca(tenuta))
+        else:
+            self._accoda(testi.chiuso(regole.possibili(stato)))
+
+    def _ferma(self, sondaggio: Sondaggio, comando: int | None = None) -> list[int] | None:
+        """Ferma il sondaggio su Telegram e lo chiude nel database; restituisce i
+        conteggi di Telegram. Se il messaggio non c'è più, lo chiude lo stesso, lo
+        dice, e restituisce None."""
+        try:
+            conteggi = self._invia(self._tg.ferma_sondaggio, self._gruppo, sondaggio.messaggio)
+        except MessaggioSparito:
+            conteggi = None
+        self._store.chiudi_sondaggio(sondaggio.id, self._adesso(), comando)
+        if conteggi is None:
+            self._accoda(testi.sparito())
+        return conteggi
 
     # --- i pezzi
 
