@@ -1,9 +1,10 @@
 import logging
+import sqlite3
 
 import pytest
 
 from prossima import testi
-from prossima.store import ChiusuraSospesa
+from prossima.store import ChiusuraSospesa, NonConfermato
 from prossima.telegram import TelegramRifiuto, TelegramTroppeRichieste
 from tests.aggiornamenti import GRUPPO, comando, risposta, vota
 from tests.conftest import Ucciso
@@ -134,6 +135,28 @@ def test_chiudi_con_una_data_sbagliata_lascia_il_sondaggio_aperto(
     assert store.sondaggio_aperto() == aperto
 
 
+def test_il_riepilogo_della_chiusura_non_elenca_le_date_passate(bot, telegram, orologio, aperto):
+    for persona in (GIO, ABE, EMI, SEM, SESE):
+        vota(bot, telegram, persona, "14/10 16/10")
+    fino_al(bot, orologio, 15)  # mercoledì 15/10: il 14 è passato
+    bot.ricevi([comando("/chiudi")])
+    assert telegram.scritti()[-1] == "🔒 Sondaggio chiuso. Date possibili: gio 16/10."
+
+
+@pytest.mark.parametrize("parola", ["14/10", "14/10/2025", "mar"])
+def test_chiudi_con_una_data_passata_lascia_il_sondaggio_aperto(
+    bot, telegram, store, orologio, aperto, parola
+):
+    fino_al(bot, orologio, 15)
+    chiudi = comando(f"/chiudi {parola}")
+    bot.ricevi([chiudi])
+    assert [(a["testo"], a["risposta_a"]) for a in telegram.di_tipo("scrivi")] == [
+        ("La data 14/10 è già passata.", chiudi["message"]["message_id"])
+    ]
+    assert telegram.di_tipo("ferma_sondaggio") == []
+    assert store.sondaggio_aperto() == aperto
+
+
 def test_chiudi_con_un_giorno_che_nel_sondaggio_compare_due_volte(bot, telegram, store):
     bot.ricevi([comando("/sondaggio 16/10 21/10 14/10")])
     aperto = store.sondaggio_aperto()
@@ -184,7 +207,7 @@ def test_rimanda_se_il_sondaggio_nuovo_non_parte(bot, telegram, store, orologio,
     [avviso] = [r for r in caplog.records if r.levelno >= logging.WARNING]
     assert (avviso.levelno, avviso.exc_info) == (logging.WARNING, None)
     assert "sendPoll: errore di rete" in avviso.getMessage()
-    assert store.ultimo_non_confermato() == orologio.adesso
+    assert store.ultimo_non_confermato() == NonConfermato(orologio.adesso, ("21/10", "23/10"))
 
 
 def test_rimanda_con_il_sondaggio_nuovo_rifiutato(bot, telegram, store, aperto, caplog):
@@ -215,8 +238,8 @@ def test_rimanda_non_confermato_e_poi_un_voto_al_sondaggio_nuovo(bot, telegram, 
     assert telegram.scritti() == [
         RIMANDO_NON_CONFERMATO,
         "Ho ricevuto un voto per un sondaggio che non conosco: "
-        "forse quello che Telegram non mi ha confermato. "
-        "Rilanciate /sondaggio@ProssimaVoltaBot e votate lì.",
+        "forse quello che Telegram non mi ha confermato. Rilanciatelo e votate lì:\n"
+        "/sondaggio@ProssimaVoltaBot 21/10 23/10",
     ]
 
 
@@ -355,6 +378,97 @@ def test_il_rimanda_in_sospeso_apre_il_sondaggio_nuovo(bot, telegram, store, ape
     ]
 
 
+def test_il_rimanda_in_sospeso_con_il_sondaggio_nuovo_che_non_parte(bot, telegram, store, aperto):
+    telegram.guasti["ferma_sondaggio"] = telegram_guasto("ferma_sondaggio")
+    rimanda = comando("/chiudi rimanda")
+    bot.ricevi([rimanda])
+    del telegram.guasti["ferma_sondaggio"]
+    telegram.guasti["manda_sondaggio"] = telegram_guasto("manda_sondaggio")
+    bot.ricevi([])  # lo stop ritentato passa, il sondaggio nuovo no
+    assert store.sondaggio_aperto() is None
+    assert store.chiuso_dal_comando(rimanda["message"]["message_id"])
+    assert store.chiusura_sospesa() is None
+    assert telegram.scritti() == [CHIUSURA_NON_CONFERMATA, RIMANDO_NON_CONFERMATO]
+
+
+def test_un_completamento_che_fallisce_non_si_ritenta_fino_al_riavvio(
+    bot, telegram, store, aperto, riavvia, monkeypatch, caplog
+):
+    telegram.guasti["ferma_sondaggio"] = telegram_guasto("ferma_sondaggio")
+    rimanda = comando("/chiudi rimanda")
+    bot.ricevi([rimanda])
+    del telegram.guasti["ferma_sondaggio"]
+
+    def rotta(*argomenti, **chiavi):
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(store, "usa_frase", rotta)  # dopo sendPoll, il database non risponde
+    with caplog.at_level(logging.WARNING):
+        for _ in range(3):
+            bot.ricevi([])
+    # un sondaggio nuovo solo, non uno a ogni giro; la chiusura resta in sospeso
+    assert len(telegram.di_tipo("manda_sondaggio")) == 2
+    sospesa = ChiusuraSospesa(aperto.id, rimanda["message"]["message_id"], "rimanda")
+    assert store.chiusura_sospesa() == sospesa
+    [errore] = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert errore.getMessage() == f"chiusura del sondaggio {aperto.id} non completata"
+    assert errore.exc_info is not None
+    # «Telegram non ha ancora confermato…» sarebbe falso: lo stop è passato
+    lancio = comando("/sondaggio")
+    bot.ricevi([lancio])
+    completare = (
+        "Non sono riuscito a completare la chiusura del sondaggio di prima. "
+        "Chi può chiudere la riprovi con:\n/chiudi@ProssimaVoltaBot rimanda"
+    )
+    assert [(a["testo"], a["risposta_a"]) for a in telegram.di_tipo("scrivi")][-1] == (
+        completare,
+        lancio["message"]["message_id"],
+    )
+    monkeypatch.undo()
+    riavvia().ricevi([])  # dopo un riavvio si riprova, una volta
+    assert store.sondaggio_aperto().date == (d("21/10"), d("23/10"))
+    assert store.chiusura_sospesa() is None
+    assert len(telegram.di_tipo("manda_sondaggio")) == 3
+    assert telegram.scritti() == [
+        CHIUSURA_NON_CONFERMATA,
+        completare,
+        "🔁 Rimandiamo: nuovo sondaggio sulla settimana del 20/10.",
+    ]
+
+
+@pytest.mark.parametrize(
+    "testo, riga",
+    [("/chiudi", "/chiudi@ProssimaVoltaBot"), ("/chiudi mar", "/chiudi@ProssimaVoltaBot 14/10")],
+)
+def test_dopo_un_completamento_fallito_un_chiudi_nuovo_lo_riprova(
+    bot, telegram, store, aperto, monkeypatch, testo, riga
+):
+    telegram.guasti["ferma_sondaggio"] = telegram_guasto("ferma_sondaggio")
+    bot.ricevi([comando(testo)])
+    del telegram.guasti["ferma_sondaggio"]
+
+    def rotta(*argomenti, **chiavi):
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(store, "chiudi_sondaggio", rotta)
+    bot.ricevi([])  # lo stop passa, il completamento no
+    lancio = comando("/sondaggio")
+    bot.ricevi([lancio])
+    assert telegram.scritti()[-1] == (
+        "Non sono riuscito a completare la chiusura del sondaggio di prima. "
+        "Chi può chiudere la riprovi con:\n" + riga
+    )
+    monkeypatch.undo()
+    nuovo = comando("/chiudi 16/10", da=ABE.telegram_id)
+    bot.ricevi([nuovo])
+    assert [(a["testo"], a["risposta_a"]) for a in telegram.di_tipo("scrivi")][-2:] == [
+        ("Riprovo a completare la chiusura del sondaggio.", nuovo["message"]["message_id"]),
+        ("🎲 Si gioca giovedì 16/10.", None),
+    ]
+    assert store.sondaggio_aperto() is None
+    assert store.chiuso_dal_comando(nuovo["message"]["message_id"])
+
+
 def test_uno_stop_durante_la_pausa_di_un_429_parte_finita_la_pausa(
     bot, telegram, store, orologio, aperto
 ):
@@ -387,14 +501,54 @@ def test_uno_stop_rifiutato_va_nel_log_una_volta_e_si_ritenta(bot, telegram, sto
     assert telegram.scritti() == [CHIUSURA_NON_CONFERMATA, NESSUNA_POSSIBILE]
 
 
+def test_lo_stop_ritentato_va_nel_log_la_prima_volta_e_poi_ogni_dieci_minuti(
+    bot, telegram, store, orologio, aperto, caplog
+):
+    telegram.guasti["ferma_sondaggio"] = telegram_guasto("ferma_sondaggio")
+    with caplog.at_level(logging.WARNING):
+        bot.ricevi([comando("/chiudi")])
+        for _ in range(3):
+            orologio.avanza(seconds=25)
+            bot.ricevi([])
+    avvisi = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(avvisi) == 1
+    assert "stopPoll: errore di rete" in avvisi[0]
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        orologio.avanza(minutes=10)
+        bot.ricevi([])
+        bot.ricevi([])
+    avvisi = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(avvisi) == 1
+    assert f"chiusura del sondaggio {aperto.id}" in avvisi[0]
+    assert "stopPoll: errore di rete" in avvisi[0]
+
+
+@pytest.mark.parametrize(
+    "guasto",
+    [telegram_guasto("ferma_sondaggio"), TelegramRifiuto("stopPoll: Bad Request: x")],
+    ids=["rete", "rifiuto"],
+)
+def test_con_la_chiusura_in_sospeso_niente_annunci(bot, telegram, store, aperto, guasto):
+    telegram.guasti["ferma_sondaggio"] = guasto
+    bot.ricevi([comando("/chiudi")])
+    possibile_il_14(bot, telegram)  # il 14/10 diventa possibile: la decisione è già presa
+    assert telegram.scritti() == [CHIUSURA_NON_CONFERMATA]
+    del telegram.guasti["ferma_sondaggio"]
+    bot.ricevi([])
+    assert telegram.scritti() == [
+        CHIUSURA_NON_CONFERMATA,
+        "🔒 Sondaggio chiuso. Date possibili: mar 14/10.",
+    ]
+
+
 def test_con_la_chiusura_in_sospeso_un_sondaggio_aspetta(bot, telegram, store, aperto):
     telegram.guasti["ferma_sondaggio"] = telegram_guasto("ferma_sondaggio")
     bot.ricevi([comando("/chiudi")])
     lancio = comando("/sondaggio")
     bot.ricevi([lancio])
     assert [(a["testo"], a["risposta_a"]) for a in telegram.di_tipo("scrivi")][-1] == (
-        "Il sondaggio di prima non è ancora chiuso: Telegram non ha confermato la chiusura. "
-        "Riprovate fra poco.",
+        "Telegram non ha ancora confermato la chiusura del sondaggio di prima: riprovate fra poco.",
         lancio["message"]["message_id"],
     )
     assert len(telegram.di_tipo("manda_sondaggio")) == 1
@@ -509,15 +663,15 @@ def test_ucciso_mentre_rimanda_quello_in_sospeso(bot, telegram, store, aperto, u
 def test_un_voto_sconosciuto_con_la_chiusura_in_sospeso_non_dice_votate_qui(
     bot, telegram, store, aperto
 ):
-    store.segna_non_confermato(aperto.aperto_alle)
+    store.segna_non_confermato(aperto.aperto_alle, ["mar", "gio"])
     telegram.guasti["ferma_sondaggio"] = telegram_guasto("ferma_sondaggio")
     bot.ricevi([comando("/chiudi")])
     bot.ricevi([risposta("poll-orfano", ABE.telegram_id, 0)])
     avviso = telegram.di_tipo("scrivi")[-1]
     assert (avviso["testo"], avviso["risposta_a"]) == (
         "Ho ricevuto un voto per un sondaggio che non conosco: "
-        "forse quello che Telegram non mi ha confermato. "
-        "Rilanciate /sondaggio@ProssimaVoltaBot e votate lì.",
+        "forse quello che Telegram non mi ha confermato. Rilanciatelo e votate lì:\n"
+        "/sondaggio@ProssimaVoltaBot mar gio",
         None,
     )
 

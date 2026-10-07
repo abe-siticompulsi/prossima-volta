@@ -3,7 +3,8 @@
 Data: 2026-10-07. Stato: approvata da Alberto in conversazione (tre parti più le
 modifiche), da eseguire con subagenti. Aggiornata il 2026-10-08 con il giro di
 correzioni A (gli errori di Telegram nel bot, decisi su delega di Alberto):
-§3.1, §3.6, §3.7, §4.
+§3.1, §3.6, §3.7, §4; e con il giro B (la ripresa che riprende, decisa su
+delega di Alberto): §3.1, §3.7, §3.8, §4.
 
 ## 1. Perché
 
@@ -69,8 +70,8 @@ e ignora i comandi rivolti ad altri bot.
   lanciato (nessuno, se non ce n'erano) e niente dopo: un punto finale si
   copierebbe con l'ultima data. Se il sondaggio può essere partito (rete, 5xx,
   una risposta illeggibile; non durante la pausa, non dopo un rifiuto), il bot
-  ricorda il momento del tentativo: serve per i voti a un sondaggio
-  sconosciuto (§4).
+  ricorda il momento del tentativo e i suoi argomenti: servono per i voti a un
+  sondaggio sconosciuto (§4).
 - **Fuori dal gruppo configurato** il bot non risponde a niente.
 
 ### 3.2 Il sondaggio
@@ -174,17 +175,22 @@ frasi usate stanno nel database. La lista iniziale (Alberto la correggerà):
 
 Solo le persone con `chiude = true`. Altrimenti: «Il sondaggio lo chiudono gio o
 abe.» (i nomi dal roster). Senza sondaggio aperto: «Non c'è nessun sondaggio
-aperto.»
+aperto.» (salvo il sondaggio che una ripresa ha fermato e aspetta di riaprire,
+che si chiude come se fosse aperto, §3.8)
 
 - **`/chiudi`**: il bot ferma il sondaggio (`stopPoll`) e scrive «🔒 Sondaggio
   chiuso. Date possibili: mar 14/10, gio 16/10.» oppure «🔒 Sondaggio chiuso.
-  Nessuna data con il master e quattro giocatori.»
+  Nessuna data con il master e quattro giocatori.» Le date possibili sono solo
+  quelle da oggi in poi (nel fuso `Europe/Zurich`): una data passata non si
+  elenca. Vale per ogni chiusura che dice le date possibili.
 - **`/chiudi 14/10`** (una data del sondaggio, `g/m` o `g.m`, o il suo giorno,
   `mar`): ferma il sondaggio e scrive «🎲 Si gioca martedì 14/10.» (giorno per
   intero).
 - **Rifiuti di `/chiudi`** (risposta al comando, il sondaggio resta aperto):
   - una data che non era nel sondaggio: «La data 15/10 non era nel
     sondaggio.»;
+  - una data del sondaggio già passata (scritta come data o come giorno): «La
+    data 8/10 è già passata.» (il testo di §3.1, con la data in forma `g/m`);
   - un giorno che nel sondaggio non c'è: «Nel sondaggio non c'è nessun
     venerdì.» («nessuna domenica»);
   - un giorno che nel sondaggio c'è più di una volta: «Nel sondaggio c'è più
@@ -196,9 +202,10 @@ aperto.»
     rifiuto di `/sondaggio`).
 - **`/chiudi rimanda`**: ferma il sondaggio, lancia un sondaggio nuovo sulla
   settimana dopo quella dell'ultima data, con gli stessi giorni della settimana
-  del sondaggio chiuso e senza le date già passate, e scrive «🔁 Rimandiamo:
-  nuovo sondaggio sulla settimana del 20/10.» (il lunedì della settimana del
-  sondaggio nuovo, ricavato dalle sue date).
+  del sondaggio chiuso (quelli con cui è stato lanciato, anche se una ripresa
+  ha tolto le date passate, §3.8) e senza le date già passate, e scrive
+  «🔁 Rimandiamo: nuovo sondaggio sulla settimana del 20/10.» (il lunedì della
+  settimana del sondaggio nuovo, ricavato dalle sue date).
   - Il vecchio si chiude nel database insieme all'apertura del nuovo e al
     messaggio «🔁», in una transazione. Un'interruzione prima è recuperabile:
     il comando riletto trova il vecchio ancora aperto nel database, lo stop
@@ -213,8 +220,8 @@ aperto.»
     /sondaggio@<bot> 21/10 23/10
     ```
 
-    Nella stessa transazione ricorda il tentativo, se il sondaggio nuovo può
-    essere partito (§3.1).
+    Nella stessa transazione ricorda il tentativo, con le date come
+    argomenti, se il sondaggio nuovo può essere partito (§3.1).
   - Se tutte le date della settimana dopo sono passate, il bot chiude il
     sondaggio e scrive «Le date del sondaggio sono passate: lo chiudo.», senza
     sondaggio nuovo.
@@ -235,19 +242,43 @@ aperto.»
   sondaggio è fermo (o già chiuso, o che il messaggio non c'è più), e allora
   chiude come avrebbe fatto il comando («🔒…», con le date possibili di quel
   momento, «🎲…», o `rimanda`), con il messaggio nella stessa transazione della
-  chiusura. Un rifiuto va nel log come errore una volta per processo, e lo
-  stop si ritenta lo stesso. Se lo stop era passato, il nuovo tentativo trova
-  il sondaggio già chiuso (il punto sopra).
+  chiusura. Un errore di rete va nel log come avviso la prima volta, e poi al
+  massimo ogni 10 minuti per la stessa chiusura; un rifiuto va nel log come
+  errore una volta per processo, e lo stop si ritenta lo stesso (un rifiuto
+  che dura, come il bot tolto dal gruppo, si vede nel log e si sistema a
+  mano). Se lo stop era passato, il nuovo tentativo trova il sondaggio già
+  chiuso (il punto sopra). Se il completamento fallisce per un errore che non
+  viene da Telegram (il database, un errore del bot), va nel log con il
+  traceback e non si ritenta fino al prossimo avvio, che lo riprova una volta:
+  con `rimanda`, ritentarlo a ogni giro manderebbe un sondaggio nuovo a ogni
+  giro. La chiusura resta in sospeso. Fino al riavvio, `/sondaggio` risponde
+  al comando (lo stop può essere passato, e «Telegram non ha ancora
+  confermato…» sarebbe falso), con il comando da copiare da solo sull'ultima
+  riga e l'argomento in sospeso (nessuno, la data `g/m`, o `rimanda`):
+
+  ```
+  Non sono riuscito a completare la chiusura del sondaggio di prima. Chi può chiudere la riprovi con:
+  /chiudi@<bot> rimanda
+  ```
+
+  e un `/chiudi` nuovo di chi può chiudere sostituisce l'argomento in sospeso,
+  riceve «Riprovo a completare la chiusura del sondaggio.» e il bot riprova il
+  completamento con il comando nuovo.
 - Mentre una chiusura è in sospeso:
-  - `/sondaggio` risponde al comando «Il sondaggio di prima non è ancora
-    chiuso: Telegram non ha confermato la chiusura. Riprovate fra poco.» (al
-    posto di «C'è già un sondaggio aperto…», che sarebbe falso);
+  - `/sondaggio` risponde al comando «Telegram non ha ancora confermato la
+    chiusura del sondaggio di prima: riprovate fra poco.» (al posto di «C'è
+    già un sondaggio aperto…», che sarebbe falso);
   - un altro `/chiudi` di chi può chiudere sostituisce l'argomento in sospeso
     con il suo (vale l'ultima decisione), non manda un altro stop e riceve la
     stessa risposta, «Telegram non ha confermato la chiusura del sondaggio:
     riprovo da solo.»; un `/chiudi` rifiutato non cambia niente;
   - l'avviso di un voto a un sondaggio sconosciuto è quello senza sondaggio
-    aperto (§4).
+    aperto (§4);
+  - niente annunci per quel sondaggio («quasi», «possibile», «non più
+    possibile», «impossibile»): la decisione di chiudere è presa, e un
+    annuncio nuovo la contraddirebbe;
+  - una ripresa dopo il buio lascia il sondaggio alla chiusura in sospeso e
+    non lo riapre (§3.8).
 - Il messaggio che dice la chiusura («🔒…», «🎲…», «Il messaggio del sondaggio
   non c'è più…») si salva insieme alla chiusura, nella stessa transazione: un
   processo fermato fra le due non lo perde. Con `rimanda`, «Il messaggio del
@@ -268,8 +299,12 @@ aggiornamenti ricevuti:
    per opzione) e li confronta con i propri, calcolati su tutti i voti
    registrati (anche di chi non è nel roster):
    - uguali: «I conteggi del sondaggio sono gli stessi che avevo io.»;
-   - diversi: «I conteggi del sondaggio sono diversi dai miei: mentre ero
-     spento qualcuno ha votato o cambiato voto.».
+   - diversi: «I conteggi del sondaggio sono diversi dai miei: qualcuno ha
+     votato o cambiato voto senza che lo sapessi.».
+
+   Un sondaggio nato nella lettura stessa (un `/sondaggio` arrivato con gli
+   aggiornamenti del buio) non ha voti persi: non si ferma e non si rifà, e il
+   bot scrive solo il messaggio del punto 1.
 3. **Lo riapre** con le date non ancora passate (stessa domanda, frase di
    «Nessuna» nuova) e **tiene buoni i voti registrati**: valgono per il
    sondaggio nuovo finché la persona non vota nel nuovo, e allora vale il voto
@@ -277,10 +312,94 @@ aggiornamenti ricevuti:
    non avete cambiato idea, non serve rivotare. Non hanno ancora votato: sese,
    pippo.» (menzioni su chi non ha votato; parti omesse se vuote).
    Gli annunci già fatti restano validi (un «possibile» non si ripete).
+   Un voto dato nel sondaggio di prima poco prima dello stop, che arriva dopo
+   la riapertura, vale se la persona non ha ancora votato nel sondaggio
+   riaperto; le sue opzioni si leggono sulle date di prima.
 4. Se nessuna data è ancora nel futuro: «Le date del sondaggio sono passate:
    lo chiudo.» e niente sondaggio nuovo.
 
 Senza sondaggio aperto, il bot scrive solo il messaggio del punto 1.
+
+**La ripresa fa il possibile per arrivare in fondo** (richiesta di Alberto).
+Ogni passo si salva nel database con il messaggio che lo dice, in una
+transazione: la lettura, il messaggio del buio e il sondaggio da riprendere;
+il sondaggio fermato e la frase sui conteggi; il sondaggio riaperto e
+«Riapro il sondaggio…». Se Telegram non risponde (rete, 5xx, un rifiuto, la
+pausa dopo un 429) o il processo si ferma a metà, a ogni lettura seguente la
+ripresa continua dal passo in cui si era fermata, senza ripetere i messaggi già
+salvati; nel log un avviso (un errore, per un rifiuto) la prima volta, e poi al
+massimo ogni 10 minuti. Se il sondaggio riaperto non parte, nel gruppo non si
+dice niente: «riprovate con /sondaggio» (§3.1) farebbe buttare i voti tenuti.
+Se il sondaggio riaperto è partito ma la risposta si è persa, o il processo si
+è fermato prima di salvarlo, la lettura seguente ne manda un altro: nel gruppo
+ce ne sono due (caso raro, accettato, come per `rimanda` in §3.7), e i voti a
+quello che il bot non conosce vanno nel log. Un errore che non viene da
+Telegram (il database, un errore del bot) va nel log con il traceback e ferma
+la ripresa dov'è fino al prossimo avvio, che la riprova una volta: ritentarla a
+ogni lettura ripeterebbe l'errore, o manderebbe un sondaggio nuovo a ogni
+lettura. Fino al riavvio, se il sondaggio è ancora aperto nel database e lo
+stop della ripresa è partito, `/sondaggio` riceve in risposta (lo stop può
+essere stato confermato, e «Telegram non ha ancora confermato…» sarebbe
+falso):
+
+```
+Non sono riuscito a completare la chiusura del sondaggio di prima. Chi può chiudere la riprovi con:
+/chiudi@<bot>
+```
+
+Mentre la ripresa aspetta:
+
+- un `/chiudi` che chiude il sondaggio la finisce, in entrambe le fasi:
+  niente riapertura. Quando il sondaggio è già fermo e la riapertura aspetta,
+  non c'è un sondaggio aperto, ma il `/chiudi` chiude come farebbe su quel
+  sondaggio, con i voti tenuti: «🔒 Sondaggio chiuso. …», «🎲 …», o `rimanda`
+  con il sondaggio nuovo della settimana dopo (§3.7), e la ripresa finisce
+  nella stessa transazione del messaggio. Se questa chiusura fallisce per un
+  errore che non viene da Telegram, va nel log con il traceback e la
+  riapertura non riparte da sola: la ripresa resta ferma fino al prossimo
+  avvio, che la riprova (come sopra);
+- se il sondaggio è fermo e la riapertura aspetta, un `/sondaggio` apre un
+  sondaggio nuovo, che vale al posto della riapertura: la ripresa finisce
+  nella stessa transazione dell'apertura (così anche il sondaggio nuovo di
+  `rimanda`), anche quando la ripresa era ferma per un errore;
+- se le date passano tutte: «Le date del sondaggio sono passate: lo chiudo.»;
+- dopo uno stop di cui Telegram non ha confermato l'esito, il sondaggio può
+  essere già fermo: come con una chiusura in sospeso (§3.7), `/sondaggio`
+  riceve «Telegram non ha ancora confermato la chiusura del sondaggio di
+  prima: riprovate fra poco.», l'avviso di un voto a un sondaggio sconosciuto è
+  quello senza sondaggio aperto (§4), e niente annunci;
+- con il sondaggio fermo e la riapertura che aspetta, un voto dato in quel
+  sondaggio poco prima dello stop si registra e vale per il sondaggio riaperto;
+  un voto a un sondaggio sconosciuto va solo nel log (l'avviso inviterebbe a
+  rilanciare `/sondaggio`, che farebbe buttare i voti tenuti).
+
+**Se il messaggio del sondaggio non c'è più**, il bot lo chiude e lo dice,
+«Il messaggio del sondaggio non c'è più: lo considero chiuso.» (§3.7), e non
+confronta né riapre niente.
+
+**Con una chiusura in sospeso** (§3.7) chi può chiudere l'ha chiuso: la
+ripresa non ferma il sondaggio e non lo riapre, ma lo lascia alla chiusura in
+sospeso, che ritenta lo stop e completa il comando come al solito («🔒…»,
+«🎲…», `rimanda`). Se Telegram risponde che il sondaggio è già chiuso, era
+passato lo stop di quel `/chiudi`.
+
+**Se Telegram risponde che il sondaggio è già chiuso** (§3.7), senza una
+chiusura in sospeso:
+
+- se uno **stop di questa ripresa** era già partito (la risposta non è
+  arrivata, o il processo si è fermato prima di salvarla), è passato quello:
+  «Il sondaggio risultava già chiuso: non posso confrontare i conteggi.», e la
+  ripresa va avanti con la riapertura;
+- altrimenti chi l'ha chiuso non si sa: il bot lo chiude nel database e lo
+  dice, «Il sondaggio risultava già chiuso.», e non lo riapre (non si riapre un
+  sondaggio che qualcuno ha chiuso).
+
+Il bot sa che uno stop della ripresa è partito perché lo segna prima di
+mandarlo. Un limite: se il processo si ferma dopo quel segno e prima di
+salvare il caso «chi l'ha chiuso non si sa», dopo il riavvio il «già chiuso»
+si attribuisce alla ripresa, e il sondaggio si riapre con «Il sondaggio
+risultava già chiuso: non posso confrontare i conteggi.». Lo stesso dopo uno
+stop della ripresa che Telegram ha rifiutato (4xx). Caso raro, accettato.
 
 ## 4. Errori
 
@@ -290,7 +409,9 @@ Senza sondaggio aperto, il bot scrive solo il messaggio del punto 1.
   nessun invio prima di `retry_after`, contato da quando arriva la risposta;
   nel frattempo il bot non prova nemmeno (un solo avviso nel log, quello del
   429), e un `/sondaggio` o un `/chiudi` ricevono la risposta «Telegram non ha
-  confermato…» (§3.1, §3.7), che parte finita l'attesa.
+  confermato…» (§3.1, §3.7), che parte finita l'attesa. Un invio che non parte
+  per la rete o un 5xx va nel log come avviso la prima volta, e poi al massimo
+  ogni 10 minuti (un 429 sempre).
 - **Un annuncio rifiutato** da Telegram (4xx) va nel log come errore e non
   ferma gli annunci seguenti; non conta come fatto. Lo stesso testo avrebbe lo
   stesso rifiuto: il bot non lo riprova fino al prossimo avvio (un errore nel
@@ -305,17 +426,25 @@ Senza sondaggio aperto, il bot scrive solo il messaggio del punto 1.
   Alberto). Va sempre nel log, con l'identificativo del sondaggio. Nel gruppo,
   una sola volta per sondaggio e solo se negli ultimi 7 giorni Telegram non ha
   confermato un sondaggio che può essere partito (di `/sondaggio`, o il
-  sondaggio nuovo di `/chiudi rimanda`; §3.1). Senza un sondaggio aperto: «Ho
-  ricevuto un voto per un sondaggio che non conosco: forse quello che Telegram
-  non mi ha confermato. Rilanciate /sondaggio@<bot> e votate lì.» Con un
-  sondaggio aperto, in risposta al suo messaggio: «Ho ricevuto un voto per un
-  sondaggio che non conosco: forse quello che Telegram non mi ha confermato.
-  Il sondaggio che conto è questo: votate qui.» Il tentativo resta anche dopo
-  un `/sondaggio` riuscito. Senza un tentativo recente, solo il log: così i
+  sondaggio nuovo di `/chiudi rimanda`; §3.1). Senza un sondaggio aperto, con
+  il comando da copiare da solo sull'ultima riga e niente dopo, con gli
+  argomenti del tentativo non confermato (come in §3.1):
+
+  ```
+  Ho ricevuto un voto per un sondaggio che non conosco: forse quello che Telegram non mi ha confermato. Rilanciatelo e votate lì:
+  /sondaggio@<bot> mar gio
+  ```
+
+  Con un sondaggio aperto, in risposta al suo messaggio: «Ho ricevuto un voto
+  per un sondaggio che non conosco: forse quello che Telegram non mi ha
+  confermato. Il sondaggio che conto è questo: votate qui.» Il tentativo resta
+  anche dopo un `/sondaggio` riuscito. Senza un tentativo recente, solo il log: così i
   voti del piano reale non finiscono nel gruppo del party. Un voto per un
-  sondaggio che il bot conosce ma che non è aperto si ignora. Per l'avviso, un
-  sondaggio con la chiusura in sospeso (§3.7) non conta come aperto: chi può
-  chiudere l'ha già chiuso.
+  sondaggio che il bot conosce ma che non è aperto si ignora (salvo il voto
+  arrivato tardi al sondaggio di prima di una ripresa, §3.8). Per l'avviso, un
+  sondaggio con la chiusura in sospeso (§3.7), o con lo stop della ripresa non
+  confermato (§3.8), non conta come aperto: può essere già fermo. Mentre la
+  ripresa aspetta di riaprire il sondaggio, l'avviso va solo nel log (§3.8).
 - **Il ciclo non si ferma** per un errore: lo registra e continua (come
   `cicli.py` di `radiant-selfie-machine`).
 - **Il token non finisce mai nei log** (stessa tecnica del client dei selfie:

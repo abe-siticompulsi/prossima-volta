@@ -211,6 +211,8 @@ def rifiuto_di_chiudi(r: regole.Rifiuto) -> Testo:
             )
         case regole.GiornoAssente():
             return Testo(f"Nel sondaggio non c'è {_con_articolo(r.giorno, 'nessun', 'nessuna')}.")
+        case regole.DataPassata():
+            return Testo(f"La data {r.scritta} è già passata.")
     raise TypeError(f"rifiuto sconosciuto: {r!r}")
 
 
@@ -232,15 +234,22 @@ def sondaggio_non_confermato(nome_bot: str, argomenti: Sequence[str]) -> Testo:
     )
 
 
-def voto_sconosciuto(nome_bot: str, con_sondaggio_aperto: bool = False) -> Testo:
-    """Con un sondaggio aperto il messaggio risponde a quello: «questo»."""
+def voto_sconosciuto(
+    nome_bot: str, argomenti: Sequence[str] = (), con_sondaggio_aperto: bool = False
+) -> Testo:
+    """`argomenti`: quelli del tentativo non confermato, per il comando da
+    copiare. Con un sondaggio aperto il messaggio risponde a quello: «questo»."""
     inizio = (
         "Ho ricevuto un voto per un sondaggio che non conosco: "
         "forse quello che Telegram non mi ha confermato. "
     )
     if con_sondaggio_aperto:
         return Testo(inizio + "Il sondaggio che conto è questo: votate qui.")
-    return Testo(inizio + f"Rilanciate /sondaggio@{nome_bot} e votate lì.")
+    return Testo(
+        inizio
+        + "Rilanciatelo e votate lì:\n"
+        + _riga_di_comando(f"/sondaggio@{nome_bot}", argomenti)
+    )
 
 
 def solo_chi_chiude(chiude: Sequence[Persona]) -> Testo:
@@ -286,9 +295,21 @@ def chiusura_non_confermata() -> Testo:
 
 def non_ancora_chiuso() -> Testo:
     return Testo(
-        "Il sondaggio di prima non è ancora chiuso: Telegram non ha confermato la chiusura. "
-        "Riprovate fra poco."
+        "Telegram non ha ancora confermato la chiusura del sondaggio di prima: riprovate fra poco."
     )
+
+
+def chiusura_non_completata(nome_bot: str, argomenti: Sequence[str]) -> Testo:
+    """`argomenti`: quelli del `/chiudi` in sospeso (nessuno, la data `g/m`, o
+    «rimanda»), per il comando da copiare."""
+    return Testo(
+        "Non sono riuscito a completare la chiusura del sondaggio di prima. "
+        "Chi può chiudere la riprovi con:\n" + _riga_di_comando(f"/chiudi@{nome_bot}", argomenti)
+    )
+
+
+def riprovo_a_completare() -> Testo:
+    return Testo("Riprovo a completare la chiusura del sondaggio.")
 
 
 # --- la ripresa dopo il buio (§3.8)
@@ -311,8 +332,16 @@ def conteggi(uguali: bool) -> Testo:
         return Testo("I conteggi del sondaggio sono gli stessi che avevo io.")
     return Testo(
         "I conteggi del sondaggio sono diversi dai miei: "
-        "mentre ero spento qualcuno ha votato o cambiato voto."
+        "qualcuno ha votato o cambiato voto senza che lo sapessi."
     )
+
+
+def gia_chiuso() -> Testo:
+    return Testo("Il sondaggio risultava già chiuso.")
+
+
+def gia_chiuso_senza_confronto() -> Testo:
+    return Testo("Il sondaggio risultava già chiuso: non posso confrontare i conteggi.")
 
 
 def riapro(votanti: Sequence[Persona], senza_voto: Sequence[Persona]) -> Testo:

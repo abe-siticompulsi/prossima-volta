@@ -5,6 +5,7 @@ import pytest
 
 from prossima import testi
 from prossima.regole import Voto
+from prossima.store import NonConfermato
 from prossima.telegram import TelegramRifiuto, TelegramTroppeRichieste
 from tests.aggiornamenti import GRUPPO, comando, risposta, vota
 from tests.finti import telegram_guasto
@@ -15,8 +16,8 @@ SETTIMANA = ["lun 13/10", "mar 14/10", "mer 15/10", "gio 16/10", "ven 17/10", "s
 NON_CONFERMATO = "Telegram non ha confermato il sondaggio: se non lo vedete, riprovate con:\n"
 SCONOSCIUTO = (
     "Ho ricevuto un voto per un sondaggio che non conosco: "
-    "forse quello che Telegram non mi ha confermato. "
-    "Rilanciate /sondaggio@ProssimaVoltaBot e votate lì."
+    "forse quello che Telegram non mi ha confermato. Rilanciatelo e votate lì:\n"
+    "/sondaggio@ProssimaVoltaBot"
 )
 
 
@@ -192,7 +193,7 @@ def test_un_sondaggio_che_non_parte_non_apre_niente_e_lo_dice(bot, telegram, sto
     [(livello, messaggio, traceback)] = avvisi(caplog)
     assert (livello, traceback) == (logging.WARNING, None)
     assert "sendPoll: errore di rete (ConnectError)" in messaggio
-    assert store.ultimo_non_confermato() == orologio.adesso
+    assert store.ultimo_non_confermato() == NonConfermato(orologio.adesso, ("mar", "gio"))
 
 
 @pytest.mark.parametrize(
@@ -294,15 +295,19 @@ def test_il_voto_al_sondaggio_non_confermato_si_dice_una_volta(bot, telegram, st
     orfano = telegram.ultimo_sondaggio["poll_id"]
     with caplog.at_level(logging.WARNING):
         bot.ricevi([risposta(orfano, ABE.telegram_id, 0), risposta(orfano, EMI.telegram_id, 0)])
-    assert telegram.scritti() == [NON_CONFERMATO + "/sondaggio@ProssimaVoltaBot mar", SCONOSCIUTO]
+    # il comando da rilanciare ha gli argomenti del tentativo non confermato
+    assert telegram.scritti() == [
+        NON_CONFERMATO + "/sondaggio@ProssimaVoltaBot mar",
+        SCONOSCIUTO + " mar",
+    ]
     assert telegram.di_tipo("scrivi")[-1]["risposta_a"] is None
     assert sum(orfano in messaggio for _, messaggio, _ in avvisi(caplog)) == 2
     # un altro sondaggio sconosciuto, un altro avviso
     bot.ricevi([risposta("poll-altro", ABE.telegram_id, 0)])
     assert telegram.scritti() == [
         NON_CONFERMATO + "/sondaggio@ProssimaVoltaBot mar",
-        SCONOSCIUTO,
-        SCONOSCIUTO,
+        SCONOSCIUTO + " mar",
+        SCONOSCIUTO + " mar",
     ]
 
 
@@ -326,10 +331,10 @@ def test_il_voto_sconosciuto_con_un_sondaggio_aperto_rimanda_a_quello(bot, teleg
 
 def test_il_voto_sconosciuto_si_dice_solo_entro_sette_giorni(bot, telegram, store, orologio):
     adesso = orologio.adesso
-    store.segna_non_confermato(adesso - timedelta(days=7, seconds=1))
+    store.segna_non_confermato(adesso - timedelta(days=7, seconds=1), [])
     bot.ricevi([risposta("poll-vecchio", ABE.telegram_id, 0)])
     assert telegram.scritti() == []
-    store.segna_non_confermato(adesso - timedelta(days=7))
+    store.segna_non_confermato(adesso - timedelta(days=7), [])
     bot.ricevi([risposta("poll-recente", ABE.telegram_id, 0)])
     assert telegram.scritti() == [SCONOSCIUTO]
 
@@ -453,6 +458,33 @@ def test_durante_la_pausa_niente_avvisi_a_ogni_giro(bot, telegram, caplog):
     [(livello, messaggio, _)] = avvisi(caplog)
     assert "Too Many Requests" in messaggio
     assert telegram.scritti() == []
+
+
+def test_un_invio_che_non_parte_va_nel_log_la_prima_volta_e_poi_ogni_dieci_minuti(
+    bot, telegram, orologio, caplog
+):
+    telegram.guasti["scrivi"] = telegram_guasto("scrivi")
+    with caplog.at_level(logging.WARNING):
+        bot.ricevi([comando("/sondaggio 32/10")])  # la risposta non parte
+        for _ in range(3):
+            orologio.avanza(seconds=25)
+            bot.ricevi([])
+        bot.ricevi([comando("/sondaggio mar")])  # la posta prima del sondaggio, neanche
+    [(livello, messaggio, traceback)] = avvisi(caplog)
+    assert (livello, traceback) == (logging.WARNING, None)
+    assert "sendMessage: errore di rete" in messaggio
+    assert len(telegram.di_tipo("manda_sondaggio")) == 1
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        orologio.avanza(minutes=10)
+        bot.ricevi([])
+        bot.ricevi([])
+    assert len(avvisi(caplog)) == 1
+    del telegram.guasti["scrivi"]
+    bot.ricevi([])
+    assert telegram.scritti() == [
+        "Non capisco «32/10»: scrivi i giorni (lun, mar, …) o le date (14/10)."
+    ]
 
 
 def test_un_429_sulla_posta_lascia_la_lettera(bot, telegram, store, orologio):

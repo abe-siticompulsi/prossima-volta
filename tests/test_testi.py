@@ -135,6 +135,7 @@ def test_i_rifiuti(rifiuto, testo):
         (regole.NonNelSondaggio("15/10"), "La data 15/10 non era nel sondaggio."),
         (regole.GiornoAmbiguo(1, d("14/10")), "Nel sondaggio c'è più di un martedì: scrivi la data (14/10)."),
         (regole.GiornoAssente(4), "Nel sondaggio non c'è nessun venerdì."),
+        (regole.DataPassata("8/10"), "La data 8/10 è già passata."),
     ],
 )
 def test_i_rifiuti_di_chiudi(rifiuto, testo):
@@ -179,8 +180,13 @@ def test_le_risposte_ai_comandi():
     )
     assert testi.voto_sconosciuto(NOME) == testi.Testo(
         "Ho ricevuto un voto per un sondaggio che non conosco: "
-        "forse quello che Telegram non mi ha confermato. "
-        "Rilanciate /sondaggio@ProssimaVoltaBot e votate lì."
+        "forse quello che Telegram non mi ha confermato. Rilanciatelo e votate lì:\n"
+        "/sondaggio@ProssimaVoltaBot"
+    )
+    assert testi.voto_sconosciuto(NOME, ["mar", "gio"]) == testi.Testo(
+        "Ho ricevuto un voto per un sondaggio che non conosco: "
+        "forse quello che Telegram non mi ha confermato. Rilanciatelo e votate lì:\n"
+        "/sondaggio@ProssimaVoltaBot mar gio"
     )
     assert testi.voto_sconosciuto(NOME, con_sondaggio_aperto=True) == testi.Testo(
         "Ho ricevuto un voto per un sondaggio che non conosco: "
@@ -211,8 +217,18 @@ def test_le_risposte_ai_comandi():
         "Telegram non ha confermato la chiusura del sondaggio: riprovo da solo."
     )
     assert testi.non_ancora_chiuso() == testi.Testo(
-        "Il sondaggio di prima non è ancora chiuso: Telegram non ha confermato la chiusura. "
-        "Riprovate fra poco."
+        "Telegram non ha ancora confermato la chiusura del sondaggio di prima: riprovate fra poco."
+    )
+    assert testi.chiusura_non_completata(NOME, []) == testi.Testo(
+        "Non sono riuscito a completare la chiusura del sondaggio di prima. "
+        "Chi può chiudere la riprovi con:\n/chiudi@ProssimaVoltaBot"
+    )
+    assert testi.chiusura_non_completata(NOME, ["rimanda"]) == testi.Testo(
+        "Non sono riuscito a completare la chiusura del sondaggio di prima. "
+        "Chi può chiudere la riprovi con:\n/chiudi@ProssimaVoltaBot rimanda"
+    )
+    assert testi.riprovo_a_completare() == testi.Testo(
+        "Riprovo a completare la chiusura del sondaggio."
     )
 
 
@@ -233,7 +249,14 @@ def test_i_conteggi_dopo_il_buio():
     assert testi.conteggi(True) == testi.Testo("I conteggi del sondaggio sono gli stessi che avevo io.")
     assert testi.conteggi(False) == testi.Testo(
         "I conteggi del sondaggio sono diversi dai miei: "
-        "mentre ero spento qualcuno ha votato o cambiato voto."
+        "qualcuno ha votato o cambiato voto senza che lo sapessi."
+    )
+
+
+def test_gia_chiuso_dopo_il_buio():
+    assert testi.gia_chiuso() == testi.Testo("Il sondaggio risultava già chiuso.")
+    assert testi.gia_chiuso_senza_confronto() == testi.Testo(
+        "Il sondaggio risultava già chiuso: non posso confrontare i conteggi."
     )
 
 

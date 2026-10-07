@@ -5,7 +5,17 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from prossima.regole import Fatti, Voto
-from prossima.store import ChiusuraSospesa, Lettera, LetteraNuova, Sondaggio, Store
+from prossima.store import (
+    FERMARE,
+    RIAPRIRE,
+    ChiusuraSospesa,
+    Lettera,
+    LetteraNuova,
+    NonConfermato,
+    RipresaInCorso,
+    Sondaggio,
+    Store,
+)
 from tests.tavolo import ESTRANEO, GIO, d
 
 ALLE = datetime(2025, 10, 7, 18, 0, tzinfo=UTC)
@@ -34,6 +44,7 @@ def test_aprire_e_ritrovare_il_sondaggio_aperto(store):
         messaggio=501,
         frase="Nessuna: riposo lungo. Molto lungo.",
         aperto_alle=ALLE,
+        date_iniziali=DATE,
     )
     assert store.sondaggio_aperto() == s
 
@@ -132,12 +143,76 @@ def test_chiudere_un_altro_sondaggio_lascia_la_chiusura_in_sospeso(store):
     assert store.chiusura_sospesa() == ChiusuraSospesa(s.id + 1, 777, None)
 
 
+def test_la_ripresa_comincia_con_la_lettura_il_buio_e_la_chiave(store):
+    s = apri(store)
+    assert store.ripresa() is None
+    store.inizia_ripresa(ALLE, [LetteraNuova(-100, "🔌 buio")], s.id)
+    assert store.ultima_lettura() == ALLE
+    assert [x.testo for x in store.posta()] == ["🔌 buio"]
+    assert store.ripresa() == RipresaInCorso(s.id, FERMARE)
+
+
+def test_la_ripresa_senza_sondaggio_e_solo_il_buio(store):
+    store.inizia_ripresa(ALLE, [LetteraNuova(-100, "🔌 buio")], None)
+    assert store.ultima_lettura() == ALLE
+    assert [x.testo for x in store.posta()] == ["🔌 buio"]
+    assert store.ripresa() is None
+
+
+def test_la_ripresa_a_meta_non_lascia_niente(store):
+    s = apri(store)
+    rotta = LetteraNuova(-100, "x", entita=({"non": object()},))  # non si scrive in JSON
+    with pytest.raises(TypeError):
+        store.inizia_ripresa(ALLE, [rotta], s.id)
+    assert store.ultima_lettura() is None
+    assert store.ripresa() is None
+    store.inizia_ripresa(ALLE, [], s.id)
+    with pytest.raises(TypeError):
+        store.fermato_per_riprendere(s.id, ALLE, [rotta])
+    assert store.sondaggio_aperto() == s
+    assert store.ripresa() == RipresaInCorso(s.id, FERMARE)
+
+
+def test_un_altro_buio_non_ricomincia_la_ripresa_dello_stesso_sondaggio(store):
+    s = apri(store)
+    store.inizia_ripresa(ALLE, [], s.id)
+    store.prova_stop_di_ripresa()
+    assert store.ripresa() == RipresaInCorso(s.id, FERMARE, stop_provato=True)
+    store.inizia_ripresa(ALLE + timedelta(days=2), [], s.id)
+    assert store.ripresa() == RipresaInCorso(s.id, FERMARE, stop_provato=True)
+    # e una riapertura che aspetta resta, dopo un altro buio senza sondaggi aperti
+    store.fermato_per_riprendere(s.id, ALLE, [])
+    store.inizia_ripresa(ALLE + timedelta(days=4), [], None)
+    assert store.ripresa() == RipresaInCorso(s.id, RIAPRIRE)
+
+
+def test_fermato_per_riprendere_chiude_accoda_e_passa_a_riaprire(store):
+    s = apri(store)
+    store.inizia_ripresa(ALLE, [], s.id)
+    store.fermato_per_riprendere(s.id, ALLE, [LetteraNuova(-100, "I conteggi")])
+    assert store.sondaggio_aperto() is None
+    assert store.sondaggio(s.id).chiuso_alle == ALLE
+    assert [x.testo for x in store.posta()] == ["I conteggi"]
+    assert store.ripresa() == RipresaInCorso(s.id, RIAPRIRE)
+
+
 def test_riaprire_cambia_il_messaggio_e_tiene_voti_e_fatti(store):
     s = apri(store)
     store.registra_voto(s.id, GIO.telegram_id, "poll-1", Voto(frozenset(DATE)), ALLE)
-    store.salva_fatti(s.id, Fatti(quasi=frozenset({d("14/10")})))
-    store.chiudi_sondaggio(s.id, ALLE)
-    riaperto = store.riapri_sondaggio(s.id, (d("16/10"),), "poll-9", 909, "Nessuna: ho tirato 1 sul calendario")
+    store.inizia_ripresa(ALLE, [], s.id)
+    store.fermato_per_riprendere(s.id, ALLE, [])
+    fatti = Fatti(quasi=frozenset({d("14/10")}), possibili={d("16/10"): None})
+    riaperto = store.riapri_sondaggio(
+        s.id,
+        (d("16/10"),),
+        "poll-9",
+        909,
+        "Nessuna: ho tirato 1 sul calendario",
+        fatti,
+        ALLE,
+        [LetteraNuova(-100, "Riapro il sondaggio.")],
+    )
+    # le date con cui è nato restano; il sondaggio di Telegram di prima si ricorda
     assert riaperto == Sondaggio(
         id=s.id,
         date=(d("16/10"),),
@@ -145,10 +220,62 @@ def test_riaprire_cambia_il_messaggio_e_tiene_voti_e_fatti(store):
         messaggio=909,
         frase="Nessuna: ho tirato 1 sul calendario",
         aperto_alle=ALLE,
+        date_iniziali=DATE,
+        poll_prima="poll-1",
+        date_prima=DATE,
     )
     assert store.sondaggio_aperto() == riaperto
     assert store.voti(s.id) == {GIO.telegram_id: Voto(frozenset(DATE))}
-    assert store.fatti(s.id).quasi == {d("14/10")}
+    assert store.fatti(s.id) == fatti
+    assert [x.testo for x in store.posta()] == ["Riapro il sondaggio."]
+    assert store.ripresa() is None
+
+
+def test_chiudere_il_sondaggio_che_aspetta_la_riapertura_finisce_la_ripresa(store):
+    s = apri(store)
+    store.inizia_ripresa(ALLE, [], s.id)
+    store.fermato_per_riprendere(s.id, ALLE, [])
+    dopo = ALLE + timedelta(hours=1)
+    assert store.chiudi_sondaggio(s.id, dopo, 777, [LetteraNuova(-100, "🔒")])
+    assert store.sondaggio(s.id).chiuso_alle == dopo
+    assert store.chiuso_dal_comando(777)
+    assert store.ripresa() is None
+    assert [x.testo for x in store.posta()] == ["🔒"]
+    # un sondaggio chiuso senza una ripresa che aspetta resta chiuso
+    assert not store.chiudi_sondaggio(s.id, dopo, 778, [LetteraNuova(-100, "🔒")])
+    assert len(store.posta()) == 1
+
+
+@pytest.mark.parametrize("modo", ["apri", "rimanda"])
+def test_aprire_un_sondaggio_toglie_la_riapertura_che_aspetta(store, modo):
+    s = apri(store)
+    store.inizia_ripresa(ALLE, [], s.id)
+    store.fermato_per_riprendere(s.id, ALLE, [])
+    if modo == "apri":
+        apri(store, poll_id="poll-2", messaggio=502)
+    else:
+        store.rimanda(s.id, 777, (d("21/10"),), "poll-2", 502, "Nessuna: x", ALLE)
+    assert store.ripresa() is None
+
+
+def test_chiudere_il_sondaggio_da_fermare_finisce_la_ripresa(store):
+    s = apri(store)
+    store.inizia_ripresa(ALLE, [], s.id)
+    store.chiudi_sondaggio(s.id, ALLE, 777)
+    assert store.ripresa() is None
+
+
+@pytest.mark.parametrize("chiudi", [False, True])
+def test_la_fine_della_ripresa_accoda_e_toglie_la_chiave(store, chiudi):
+    s = apri(store)
+    store.inizia_ripresa(ALLE, [], s.id)
+    if not chiudi:
+        store.fermato_per_riprendere(s.id, ALLE, [])
+    store.fine_ripresa(ALLE, [LetteraNuova(-100, "Fine")], chiudi=s.id if chiudi else None)
+    assert store.sondaggio_aperto() is None
+    assert store.sondaggio(s.id).chiuso_alle == ALLE
+    assert [x.testo for x in store.posta()] == ["Fine"]
+    assert store.ripresa() is None
 
 
 def test_il_voto_piu_recente_sostituisce_il_precedente_anche_vuoto(store):
@@ -211,21 +338,21 @@ def test_la_posta_in_ordine_di_arrivo(store):
 def test_il_sondaggio_non_confermato_si_ricorda_con_la_risposta(store):
     assert store.ultimo_non_confermato() is None
     risposta = LetteraNuova(-100, "Telegram non ha confermato il sondaggio", risposta_a=42)
-    store.segna_non_confermato(ALLE, [risposta])
-    assert store.ultimo_non_confermato() == ALLE
+    store.segna_non_confermato(ALLE, ["mar", "16.10"], [risposta])
+    assert store.ultimo_non_confermato() == NonConfermato(ALLE, ("mar", "16.10"))
     assert [(x.testo, x.risposta_a) for x in store.posta()] == [
         ("Telegram non ha confermato il sondaggio", 42)
     ]
     # vale l'ultimo
-    store.segna_non_confermato(ALLE + timedelta(days=1))
-    assert store.ultimo_non_confermato() == ALLE + timedelta(days=1)
+    store.segna_non_confermato(ALLE + timedelta(days=1), [])
+    assert store.ultimo_non_confermato() == NonConfermato(ALLE + timedelta(days=1), ())
 
 
 def test_chiudere_e_ricordare_un_sondaggio_non_confermato_insieme(store):
     s = apri(store)
     chiuso = LetteraNuova(-100, "🔒 Sondaggio chiuso. Telegram non ha confermato il sondaggio nuovo")
-    assert store.chiudi_sondaggio(s.id, ALLE, 777, [chiuso], non_confermato=True)
-    assert store.ultimo_non_confermato() == ALLE
+    assert store.chiudi_sondaggio(s.id, ALLE, 777, [chiuso], non_confermato=["21/10", "23/10"])
+    assert store.ultimo_non_confermato() == NonConfermato(ALLE, ("21/10", "23/10"))
     assert [x.testo for x in store.posta()] == [chiuso.testo]
 
 
@@ -239,12 +366,30 @@ def test_un_sondaggio_sconosciuto_si_avvisa_una_volta(store):
 
 def test_i_sondaggi_conosciuti(store):
     s = apri(store, poll_id="poll-1")
+    store.chiudi_sondaggio(s.id, ALLE)
+    store.riapri_sondaggio(s.id, DATE, "poll-2", 502, "Nessuna: x", Fatti(), ALLE)
+    assert store.poll_conosciuto("poll-2")
+    assert store.poll_conosciuto("poll-1")  # quello di prima della ripresa, anche senza voti
+    store.registra_voto(s.id, GIO.telegram_id, "poll-2", Voto(frozenset({d("14/10")})), ALLE)
+    store.chiudi_sondaggio(s.id, ALLE)
+    store.riapri_sondaggio(s.id, DATE, "poll-3", 503, "Nessuna: x", Fatti(), ALLE)
+    assert store.poll_conosciuto("poll-2")
+    assert not store.poll_conosciuto("poll-4")
+
+
+def test_un_voto_tardivo_vale_solo_senza_un_voto_nel_sondaggio_di_adesso(store):
+    s = apri(store, poll_id="poll-1")
     store.registra_voto(s.id, GIO.telegram_id, "poll-1", Voto(frozenset({d("14/10")})), ALLE)
     store.chiudi_sondaggio(s.id, ALLE)
-    store.riapri_sondaggio(s.id, DATE, "poll-2", 502, "Nessuna: x")
-    assert store.poll_conosciuto("poll-2")
-    assert store.poll_conosciuto("poll-1")  # quello di prima della ripresa, nei voti
-    assert not store.poll_conosciuto("poll-3")
+    store.riapri_sondaggio(s.id, DATE, "poll-2", 502, "Nessuna: x", Fatti(), ALLE)
+    store.registra_voto(s.id, ESTRANEO, "poll-2", Voto(nessuna=True), ALLE)
+    sedici = Voto(frozenset({d("16/10")}))
+    # gio ha solo il voto tenuto, del sondaggio di prima: il voto tardivo lo sostituisce
+    assert store.registra_voto_tardivo(s.id, GIO.telegram_id, "poll-1", sedici, ALLE, "poll-2")
+    # l'estraneo ha già votato nel sondaggio di adesso: il voto tardivo non vale
+    assert not store.registra_voto_tardivo(s.id, ESTRANEO, "poll-1", sedici, ALLE, "poll-2")
+    assert store.voti(s.id) == {GIO.telegram_id: sedici, ESTRANEO: Voto(nessuna=True)}
+    assert store.voti_del_poll(s.id, "poll-1") == [sedici]
 
 
 def test_offset_e_ultima_lettura(store):
