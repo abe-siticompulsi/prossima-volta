@@ -19,7 +19,7 @@ suo, un container suo, sulla stessa macchina dei selfie.
 | Decisione | Perché |
 |---|---|
 | **Il sondaggio lo crea il bot** | Telegram manda a un bot i voti (chi, quali opzioni) solo dei sondaggi non anonimi creati dal bot stesso. |
-| **Chiunque nel gruppo lo lancia**, con `/data` | Richiesta di Alberto. |
+| **Chiunque nel gruppo lo lancia**, con `/sondaggio` | Richiesta di Alberto. |
 | **Solo gio (master) e abe lo chiudono** | La decisione finale è loro; nessuno lo chiude per sbaglio. |
 | **Bot nuovo, repo nuovo, container nuovo** | I selfie restano intoccati: un errore qui non ferma la validazione delle foto la sera della partita. |
 | **Privacy del bot attiva** | Il bot riceve solo i comandi rivolti a lui e i voti dei suoi sondaggi: non legge la chat. |
@@ -29,26 +29,27 @@ suo, un container suo, sulla stessa macchina dei selfie.
 
 ## 3. Il comportamento
 
-### 3.1 Lanciare il sondaggio: `/data`
+### 3.1 Lanciare il sondaggio: `/sondaggio`
 
-Nel gruppo del party, `/data@<bot>` (il menu dei comandi di Telegram aggiunge
+Nel gruppo del party, `/sondaggio@<bot>` (il menu dei comandi di Telegram aggiunge
 `@<bot>` da solo; nel gruppo ci sono altri bot e, con la privacy attiva, un
-`/data` nudo potrebbe non arrivare). Il bot accetta `/data` e `/data@<suo nome>`
+`/sondaggio` nudo potrebbe non arrivare). Il bot accetta `/sondaggio` e `/sondaggio@<suo nome>`
 e ignora i comandi rivolti ad altri bot.
 
 - **Senza parametri**: i sette giorni della settimana seguente, da lunedì a
   domenica. «Settimana seguente» è la settimana di calendario dopo quella di
   oggi, nel fuso `Europe/Zurich` (di domenica è quella che comincia domani).
 - **Con giorni della settimana** (`lun mar mer gio ven sab dom`): quei giorni
-  della settimana seguente. `/data mar gio sab`.
-- **Con date** (`g.m` o `g.m.aaaa`): quelle date. Per `g.m` l'anno è quello
-  della prossima volta che la data arriva, oggi compreso. `/data 14.10 16.10`.
+  della settimana seguente. `/sondaggio mar gio sab`.
+- **Con date** (`g/m` o `g/m/aaaa`, e anche con il punto: `g.m`, `g.m.aaaa`):
+  quelle date. Senza anno, l'anno è quello della prossima volta che la data
+  arriva, oggi compreso. `/sondaggio 14/10 16/10`.
 - Giorni e date si possono mescolare. Le date si ordinano e i doppioni si
   tolgono.
 - **Rifiuti** (risposta al comando, nessun sondaggio):
-  - parola non capita: «Non capisco «32.10»: scrivi i giorni (lun, mar, …) o
-    le date (14.10).»;
-  - data passata: «La data 3.10 è già passata.» (oggi non è passata);
+  - parola non capita: «Non capisco «32/10»: scrivi i giorni (lun, mar, …) o
+    le date (14/10).»;
+  - data passata: «La data 3/10 è già passata.» (oggi non è passata);
   - più di 10 date: «Troppe date: al massimo 10.»;
   - un sondaggio già aperto: risposta al messaggio del sondaggio aperto, «C'è
     già un sondaggio aperto: chiudilo prima con /chiudi@<bot>.».
@@ -57,8 +58,8 @@ e ignora i comandi rivolti ad altri bot.
 ### 3.2 Il sondaggio
 
 - Domanda: «Prossima volta?».
-- Opzioni: le date come «mar 14.10» (giorno abbreviato: lun mar mer gio ven sab
-  dom; giorno e mese senza zeri iniziali), più in fondo una frase di «Nessuna di
+- Opzioni: le date come «mar 14/10», nel formato italiano (giorno abbreviato:
+  lun mar mer gio ven sab dom; giorno e mese senza zeri iniziali), più in fondo una frase di «Nessuna di
   queste» (§3.6).
 - Non anonimo, a risposta multipla: ognuno spunta tutte le date in cui c'è.
 - Un sondaggio aperto alla volta nel gruppo.
@@ -96,25 +97,25 @@ Testo semplice, senza `parse_mode`. I nomi sono i soprannomi del roster. Le
 **menzioni** sono entità `text_mention` con l'identificativo Telegram della
 persona: notificano anche chi non ha un nome utente. Gli scostamenti delle
 entità si contano in unità UTF-16, come vuole Telegram (un'emoji come 📅 ne
-vale due). Le date nei messaggi hanno la forma delle opzioni («mar 14.10»).
+vale due). Le date nei messaggi hanno la forma delle opzioni («mar 14/10»).
 
 1. **Quasi** — una volta per data, la prima volta che la data è quasi:
-   «📅 mar 14.10: ci sono gio, abe, emi e sem, manca un giocatore. Non hanno
+   «📅 mar 14/10: ci sono gio, abe, emi e sem, manca un giocatore. Non hanno
    ancora votato: sese, pippo.» I nomi dopo «Non hanno ancora votato» sono
    menzioni; se hanno votato tutti, la seconda frase non c'è.
 2. **Possibile** — una volta per data, quando diventa possibile (di nuovo
-   dopo un «non più possibile»): «✅ mar 14.10 va bene: ci sono gio, abe, emi,
+   dopo un «non più possibile»): «✅ mar 14/10 va bene: ci sono gio, abe, emi,
    sem e sese.» Il sondaggio resta aperto.
 3. **Non più possibile** — quando una data annunciata come possibile non lo è
-   più: «⚠️ mar 14.10 non va più bene: sem ha tolto il voto.» (con più persone:
+   più: «⚠️ mar 14/10 non va più bene: sem ha tolto il voto.» (con più persone:
    «sem e sese hanno tolto il voto»). Se il bot non sa chi (dopo una ripresa,
-   §3.8): «⚠️ mar 14.10 non va più bene: non ci sono più il master e quattro
+   §3.8): «⚠️ mar 14/10 non va più bene: non ci sono più il master e quattro
    giocatori.»
 4. **Impossibile** — quando tutte le date diventano fuori (di nuovo, se nel
    frattempo una era tornata in gioco):
    - con date in cui ci sono il master e almeno tre giocatori: «😬 Con quattro
-     giocatori non ci si sta in nessuna di queste date. Con tre: mar 14.10
-     (gio, abe, emi, sem). gio, abe: /chiudi@<bot> 14.10 per tenerla,
+     giocatori non ci si sta in nessuna di queste date. Con tre: mar 14/10
+     (gio, abe, emi, sem). gio, abe: /chiudi@<bot> 14/10 per tenerla,
      /chiudi@<bot> rimanda per rifare il sondaggio sulla settimana dopo.»
      (più date: elenco separato da «; »);
    - senza: «😬 Con quattro giocatori non ci si sta in nessuna di queste date,
@@ -157,14 +158,14 @@ abe.» (i nomi dal roster). Senza sondaggio aperto: «Non c'è nessun sondaggio
 aperto.»
 
 - **`/chiudi`**: il bot ferma il sondaggio (`stopPoll`) e scrive «🔒 Sondaggio
-  chiuso. Date possibili: mar 14.10, gio 16.10.» oppure «🔒 Sondaggio chiuso.
+  chiuso. Date possibili: mar 14/10, gio 16/10.» oppure «🔒 Sondaggio chiuso.
   Nessuna data con il master e quattro giocatori.»
-- **`/chiudi 14.10`** (una data del sondaggio, in forma `g.m`, o il suo giorno,
-  `mar`): ferma il sondaggio e scrive «🎲 Si gioca martedì 14.10.» (giorno per
-  intero). Una data che non era nel sondaggio: «La data 15.10 non era nel
+- **`/chiudi 14/10`** (una data del sondaggio, `g/m` o `g.m`, o il suo giorno,
+  `mar`): ferma il sondaggio e scrive «🎲 Si gioca martedì 14/10.» (giorno per
+  intero). Una data che non era nel sondaggio: «La data 15/10 non era nel
   sondaggio.», e il sondaggio resta aperto.
 - **`/chiudi rimanda`**: ferma il sondaggio, scrive «🔁 Rimandiamo: nuovo
-  sondaggio sulla settimana del 20.10.» (il lunedì della settimana dopo quella
+  sondaggio sulla settimana del 20/10.» (il lunedì della settimana dopo quella
   dell'ultima data) e lancia un sondaggio nuovo su quella settimana, con gli
   stessi giorni della settimana del sondaggio chiuso.
 - Se `stopPoll` fallisce perché il messaggio del sondaggio non c'è più
@@ -179,7 +180,7 @@ momento dell'ultima lettura riuscita. Quando una lettura riesce più di **23
 ore** dopo la precedente (un'ora di margine sulle 24), dopo aver gestito gli
 aggiornamenti ricevuti:
 
-1. **Lo dice**: «🔌 Sono rimasto senza Telegram dal 12.10 alle 21:05 al 14.10
+1. **Lo dice**: «🔌 Sono rimasto senza Telegram dal 12/10 alle 21:05 al 14/10
    alle 9:30. I comandi e i voti di quel periodo potrebbero non essermi
    arrivati.» (ore nel fuso `Europe/Zurich`).
 2. **Se c'è un sondaggio aperto, lo ferma** (`stopPoll` restituisce i conteggi
@@ -207,7 +208,7 @@ Senza sondaggio aperto, il bot scrive solo il messaggio del punto 1.
   gli annunci dei sondaggi aperti e manda quelli mancanti. Un 429 si rispetta:
   nessun invio prima di `retry_after`.
 - **Aggiornamenti doppi** dopo un riavvio (l'offset si salva dopo aver gestito
-  l'aggiornamento): un voto sostituisce il precedente, un comando `/data` con
+  l'aggiornamento): un voto sostituisce il precedente, un comando `/sondaggio` con
   un sondaggio già aperto risponde «già aperto», gli annunci sono calcolati
   dallo stato. Nessun doppione.
 - **Il ciclo non si ferma** per un errore: lo registra e continua (come
@@ -264,7 +265,7 @@ chiaro.
 tocca a ogni giro) ha meno di 2 minuti.
 
 **Il bot**: nuovo, da @BotFather, privacy attiva (il default), aggiunto al
-gruppo del party. All'avvio registra i comandi (`setMyCommands`): `data`
+gruppo del party. All'avvio registra i comandi (`setMyCommands`): `sondaggio`
 («Sondaggio per la prossima volta») e `chiudi` («Chiude il sondaggio»).
 
 ## 6. Prove
@@ -280,7 +281,7 @@ gruppo del party. All'avvio registra i comandi (`setMyCommands`): `data`
     rotazione senza ripetizioni.
   - store, config (roster sbagliati), client Telegram con un trasporto finto di
     httpx (nessun token nei messaggi d'errore).
-  - il percorso completo nel bot: `/data`, voti, annunci, `/chiudi` nelle tre
+  - il percorso completo nel bot: `/sondaggio`, voti, annunci, `/chiudi` nelle tre
     forme, rifiuti, invio fallito e ripreso, ripresa dopo il buio (conteggi
     uguali e diversi, date passate).
 - **Piano reale** (`-m reale`), con il bot vero nella chat privata di Alberto
@@ -289,7 +290,7 @@ gruppo del party. All'avvio registra i comandi (`setMyCommands`): `data`
   di Alberto che arriva come `poll_answer` con il suo identificativo e le
   opzioni, un messaggio con una menzione, `stopPoll` con i conteggi,
   `setMyCommands`.
-- **A mano, nel gruppo**: `/data@<bot>` dal menu arriva al bot con la privacy
+- **A mano, nel gruppo**: `/sondaggio@<bot>` dal menu arriva al bot con la privacy
   attiva; le menzioni notificano.
 - **`docs/differenze-fra-test-e-realta.md`**, scritto prima dei finti.
 
