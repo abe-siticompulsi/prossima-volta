@@ -1,0 +1,43 @@
+[project]
+name = "prossima-volta"
+version = "0.1.0"
+description = "Il sondaggio per la data della prossima sessione dei Danni Radiosi, nel gruppo Telegram"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28,<1",
+    # Il fuso Europe/Zurich anche nell'immagine slim, che non ha /usr/share/zoneinfo.
+    "tzdata>=2025.2",
+]
+
+[project.scripts]
+prossima = "prossima.principale:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.16"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/prossima"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Escluso di default: il piano reale parla con il bot vero e aspetta il voto di
+# Alberto. La suite veloce deve restare veloce, altrimenti smette di essere
+# lanciata.
+#   uv run pytest -m reale -rs    il piano reale (v. tests/reale/)
+addopts = "-m 'not reale'"
+markers = [
+    "reale: verifica un sistema esterno vero, non un suo finto (v. tests/reale/)",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+# La lunghezza delle righe la cura `ruff format`, non il linter.
+ignore = ["E501"]
