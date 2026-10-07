@@ -1,0 +1,21 @@
+services:
+  prossima:
+    build:
+      context: .
+      target: servizio
+    restart: unless-stopped
+    env_file: ./config/prossima.env
+    volumes:
+      - ./dati:/data
+      - ./config:/config:ro
+    # Nessuna porta: il bot chiama Telegram, nessuno chiama il bot.
+
+  prova:
+    profiles: ["prova"]
+    build:
+      context: .
+      target: prova
+    env_file: ./config/prossima.env
+    volumes:
+      - ./dati:/data
+      - ./config:/config:ro
