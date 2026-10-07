@@ -1,4 +1,4 @@
-"""Il bot: smista gli aggiornamenti di Telegram e manda gli annunci.
+"""Il bot: smista gli aggiornamenti di Telegram, manda gli annunci, fa la ripresa.
 
 Un solo processo e un solo filo: nessuna gara fra un voto e un comando.
 
@@ -65,7 +65,9 @@ class Bot:
     def ricevi(self, aggiornamenti: list[dict]) -> None:
         """Un lotto letto da `getUpdates`. Ogni aggiornamento, poi il suo offset
         (dopo, non prima: un aggiornamento gestito due volte è innocuo), poi gli
-        invii."""
+        invii. Dopo più di 23 ore senza letture, la ripresa (§3.8)."""
+        ora = self._adesso()
+        precedente = self._store.ultima_lettura()
         for aggiornamento in aggiornamenti:
             try:
                 self.gestisci(aggiornamento)
@@ -73,6 +75,12 @@ class Bot:
                 log.exception("aggiornamento %s non gestito", aggiornamento.get("update_id"))
             self._store.salva_offset(int(aggiornamento["update_id"]) + 1)
             self.manda()
+        self._store.segna_lettura(ora)
+        if regole.al_buio(precedente, ora):
+            try:
+                self.riprendi(precedente, ora)
+            except Exception:
+                log.exception("ripresa dopo il buio non riuscita")
         self.manda()
 
     def gestisci(self, aggiornamento: dict) -> None:
@@ -185,6 +193,33 @@ class Bot:
         if conteggi is None:
             self._accoda(testi.sparito())
         return conteggi
+
+    # --- la ripresa dopo il buio (§3.8)
+
+    def riprendi(self, dal: datetime, al: datetime) -> None:
+        self._accoda(testi.buio(dal, al, self._fuso))
+        sondaggio = self._store.sondaggio_aperto()
+        if sondaggio is None:
+            return
+        conteggi = self._ferma(sondaggio)
+        if conteggi is None:
+            return  # il messaggio non c'è più: chiuso, e detto
+        nostri = regole.conteggi_per_opzione(
+            sondaggio.date, self._store.voti_del_poll(sondaggio.id, sondaggio.poll_id)
+        )
+        self._accoda(testi.conteggi(conteggi == nostri))
+        future = [g for g in sondaggio.date if g >= self._oggi()]
+        if not future:
+            self._accoda(testi.date_passate())
+            return
+        mandato, frase = self._nuovo_sondaggio(future)
+        riaperto = self._store.riapri_sondaggio(
+            sondaggio.id, future, mandato.poll_id, mandato.messaggio, frase
+        )
+        fatti = regole.dopo(self._store.fatti(riaperto.id), regole.Ripresa())
+        self._store.salva_fatti(riaperto.id, fatti)
+        stato = self._stato(riaperto)
+        self._accoda(testi.riapro(stato.votanti, stato.senza_voto))
 
     # --- i pezzi
 
