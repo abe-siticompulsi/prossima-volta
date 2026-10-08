@@ -182,7 +182,7 @@ def test_finite_le_frasi_il_giro_ricomincia_solo_se_il_sondaggio_parte(bot, tele
 def test_le_opzioni_sono_in_ordine_di_data(bot, telegram):
     # i comandi danno già le date in ordine, ma i voti si leggono per indice e
     # lo store le salva ordinate: il sondaggio non si fida di chi lo chiama
-    bot._nuovo_sondaggio([d("16/10"), d("14/10")])
+    bot._invio.nuovo_sondaggio([d("16/10"), d("14/10")])
     assert telegram.ultimo_sondaggio["opzioni"][:2] == ["mar 14/10", "gio 16/10"]
 
 

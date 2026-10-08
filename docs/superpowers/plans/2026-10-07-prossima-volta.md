@@ -5304,3 +5304,26 @@ Decisioni del controllore su delega di Alberto; la spec è aggiornata (§3.1, §
 - **Minori del task 1.** `_DATA` con `re.ASCII` (le cifre arabo-indiche o a larghezza piena non sono date). Una data oltre un anno da oggi (lo stesso giorno dell'anno dopo, il 28/2 per il 29/2) è «La data 14/10/2052 è troppo lontana.» (`regole.DataTroppoLontana`, con l'anno scritto): chiude anche l'`OverflowError` di `date_rimandate` con l'anno 9999. Il `29/2` senza anno, fuori da un anno bisestile, è il prossimo 29 febbraio (con `calendar.isleap`; il secolo non bisestile compreso), e se è oltre un anno è «troppo lontana»; in un anno bisestile resta la regola di tutte le date (il 10/3/2028 «29/2» è «già passata»).
 - **Minori dei task 3 e 4** (solo prove, il codice non cambia): la lunghezza UTF-16 di una menzione con un soprannome non ASCII (`sèsè🎲`) e dell'offset della seguente; `testi.annuncio` anche su `Quasi` e `Possibile`; `riapri_sondaggio` con un altro sondaggio aperto (`IntegrityError`, il primo com'era, niente in posta); un voto rifatto in un altro `poll_id` esce da `voti_del_poll` del vecchio ed entra in quello nuovo. Provate con mutanti: ognuna fallisce senza la correzione che la riguarda.
 - **Prove**: alla fine, 409 prove veloci, 9 del piano reale (tutte saltate senza le variabili: `uv run pytest -m reale -q -rs` dice per ognuna quale e che cosa non è verificato).
+
+### Giro D: `bot.py` diviso in parti (dopo il giro C)
+
+Decisione del controllore su delega di Alberto, dalla revisione del giro B (M7): `bot.py` era cresciuto oltre le 760 righe, con tre macchine a stati intrecciate e le dipendenze fra le parti implicite in `self`. Un rifacimento puro: nessun comportamento, testo o significato di prova cambia; la spec cambia solo in §5.
+
+La struttura dei file del bot, al posto della riga di `bot.py` nella tabella «Struttura dei file»:
+
+| file | responsabilità |
+|---|---|
+| `src/prossima/bot.py` | collega le parti: il giro (`ricevi`, `manda`), lo smistamento, `/sondaggio`, i voti (anche per un sondaggio sconosciuto), gli annunci (con gli annunci rifiutati, in memoria); `COMANDI` |
+| `src/prossima/chiusura.py` | `Chiusure`: `/chiudi`, la chiusura in sospeso e i suoi tentativi (`riprova`), il completamento, `rimanda`; in memoria gli stop rifiutati e le chiusure guaste |
+| `src/prossima/ripresa.py` | `Ripresa`: la ripresa dopo il buio (`inizia`, `continua`, lo stop e la riapertura); in memoria le riprese guaste |
+| `src/prossima/invio.py` | `Invio`: ogni chiamata che scrive su Telegram, la pausa del 429, la posta in uscita, il sondaggio nuovo con la frase di «Nessuna», lo stop (`Fermato`); `TelegramInPausa`, `forse_arrivata`, `livello`, e `Avvisi` (nel log la prima volta, poi al massimo ogni 10 minuti) |
+
+Le dipendenze vanno in un senso solo, `bot` → `chiusura` → `ripresa` → `invio` (il bot usa anche la ripresa e l'invio), senza import circolari. Nessuna parte tocca le strutture in memoria di un'altra se non con un suo metodo. Rispetto alla proposta del revisore:
+
+- **La chiusura sopra la ripresa**, non sotto: `/chiudi` chiude anche il sondaggio che la ripresa aspetta di riaprire (`Ripresa.in_riapertura`), e se quella chiusura fallisce ferma la ripresa fino al riavvio (`Ripresa.ferma_fino_al_riavvio`, una struttura in memoria della ripresa). Alla ripresa delle chiusure basta sapere se ce n'è una in sospeso: è un fatto del database, e la ripresa lo legge dallo store.
+- **Il sondaggio nuovo e la frase di «Nessuna» in `invio.py`**, non in `bot.py`: li usano `/sondaggio`, `rimanda` (le chiusure) e la riapertura (la ripresa); nel bot, le parti di sotto dovrebbero richiamare quella di sopra. Anche le lettere per il gruppo (`lettera`, `lettere`, `accoda`) sono dell'invio.
+- **Gli avvisi che si ripetono**: ogni parte ha i suoi `Avvisi` (prima un solo dizionario, con chiavi diverse per invio, chiusura e ripresa: la regola è la stessa).
+- **`store.py` resta com'è**, e i suoi tipi restano lì: sono una settantina di righe su quasi settecento, e spostarli non alleggerirebbe la lettura.
+- Ogni parte scrive nel log con il proprio logger (`prossima.chiusura`, `prossima.ripresa`, `prossima.invio`): i messaggi sono gli stessi, cambia il nome del logger nella riga.
+
+Prove: le stesse 409 prove veloci, tutte verdi a ogni passo; una sola cambia il punto in cui chiama, non che cosa verifica (`bot._nuovo_sondaggio` è ora `bot._invio.nuovo_sondaggio`).

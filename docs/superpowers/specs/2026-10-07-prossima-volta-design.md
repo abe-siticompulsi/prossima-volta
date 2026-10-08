@@ -488,8 +488,16 @@ httpx, `tzdata` (il fuso nel container). Nessuna parte web, nessuna porta.
 | `src/prossima/store.py` | SQLite: sondaggi, voti (di tutti), annunci fatti, frasi usate, offset del bot, momento dell'ultima lettura. Una connessione per operazione, WAL. |
 | `src/prossima/telegram.py` | Il client: `aggiornamenti`, `io` (getMe), `manda_sondaggio`, `scrivi` (con entità e risposta a un messaggio), `ferma_sondaggio`, `registra_comandi`. Errori `TelegramError` senza token; `TelegramTroppeRichieste` con `retry_after`. |
 | `src/prossima/config.py` | Variabili d'ambiente e roster. |
-| `src/prossima/bot.py` | Smista gli aggiornamenti (comandi, `poll_answer`), manda gli annunci, fa la ripresa. |
+| `src/prossima/bot.py` | Smista gli aggiornamenti (comandi, `poll_answer`) e collega le parti: il giro (`ricevi`, `manda`), `/sondaggio`, i voti (anche per un sondaggio sconosciuto), gli annunci. |
+| `src/prossima/chiusura.py` | `/chiudi` (le date possibili, la data tenuta, `rimanda`), la chiusura in sospeso e i suoi tentativi, il completamento (§3.7). |
+| `src/prossima/ripresa.py` | La ripresa dopo il buio, un passo alla volta (§3.8). |
+| `src/prossima/invio.py` | Ogni chiamata che scrive su Telegram: la pausa dopo un 429, la posta in uscita, il sondaggio nuovo con la frase di «Nessuna», lo stop; come leggere un errore di Telegram, e la regola degli avvisi nel log che si ripetono (§4). |
 | `src/prossima/principale.py` | Avvio e ciclo; il battito per il controllo di salute. |
+
+Le parti del bot dipendono una dall'altra in un senso solo: `bot.py` →
+`chiusura.py` → `ripresa.py` → `invio.py`. Ognuna tiene le sue strutture in
+memoria (gli stop rifiutati e le chiusure guaste, le riprese guaste, la pausa
+dopo un 429, gli avvisi), che le altre toccano solo attraverso i suoi metodi.
 
 **Configurazione** (`config/prossima.env`, mai nel repo):
 `PV_BOT_TOKEN`, `PV_GRUPPO` (l'identificativo del gruppo del party),
