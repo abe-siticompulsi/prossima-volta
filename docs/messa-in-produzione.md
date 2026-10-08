@@ -29,7 +29,11 @@ Porta il repository sul server (un `git clone`, o una copia della cartella senza
 
 ```bash
 mkdir -p config dati
+sudo chown 10001:10001 dati
 ```
+
+Nel container il bot gira come utente 10001, senza privilegi (`Dockerfile`):
+`dati`, dove scrive il database e il battito, deve essere suo.
 
 ## 3. La configurazione
 
@@ -37,8 +41,14 @@ mkdir -p config dati
 cp config.esempio/prossima.env config/prossima.env
 cp config.esempio/roster.toml config/roster.toml
 cp config.esempio/frasi.txt config/frasi.txt
-chmod 600 config/prossima.env config/roster.toml
+chmod 600 config/prossima.env
+chmod 640 config/roster.toml config/frasi.txt
+sudo chgrp 10001 config/roster.toml config/frasi.txt
 ```
+
+`prossima.env` lo legge Docker, non il bot: resta solo tuo. Il roster e le frasi
+li legge il bot, attraverso il gruppo 10001; tu ne resti il proprietario e li
+modifichi come sempre.
 
 In `config/prossima.env` metti il token. In `config/roster.toml` metti gli
 identificativi Telegram veri delle sei persone (i numeri: li ha già il roster di
@@ -135,7 +145,9 @@ docker compose logs --tail 5 prossima
 Basta `restart`: il file lo legge il bot quando parte. La riga dell'avvio nel
 log dice quante frasi ha letto; una frase troppo lunga o ripetuta ferma l'avvio
 con una riga «configurazione: …» che dice quale riga correggere (dopo, di nuovo
-`docker compose restart prossima`). Il bot propone prima le frasi che non ha
+`docker compose restart prossima`). Se la riga dice «Permission denied», il file
+ha perso il gruppo (succede con un editor che lo riscrive da capo): `sudo chgrp
+10001 config/frasi.txt`, poi di nuovo `restart`. Il bot propone prima le frasi che non ha
 ancora usato in questo giro, quindi anche quelle nuove.
 
 ## Se il bot resta bloccato

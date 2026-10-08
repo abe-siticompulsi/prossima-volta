@@ -32,6 +32,13 @@ smentisce una.
 
 ## Da controllare a mano sul server
 
+- Il bot gira come utente 10001, con il file system in sola lettura tranne
+  `/data` e `/tmp`, senza capability e con 256 MB di memoria: le prove non
+  lanciano un container, e `tests/test_container.py` controlla solo il testo di
+  `Dockerfile` e `compose.yaml`. Dopo il primo avvio: `docker compose ps`
+  `healthy`, nessun «Permission denied» nel log, e `docker compose run --rm
+  prossima prossima sblocca` che risponde «niente da sbloccare».
+
 - `docker compose stop prossima` torna subito (non dopo 10 secondi): `init: true`
   fa arrivare `SIGTERM` a Python. Dopo, `docker compose start prossima`.
 - Dopo aver corretto `config/roster.toml` o `config/prossima.env`, `docker compose

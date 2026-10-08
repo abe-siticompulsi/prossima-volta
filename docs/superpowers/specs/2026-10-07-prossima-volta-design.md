@@ -609,8 +609,11 @@ come PID 1, SIGTERM sarebbe ignorato e `docker compose stop` aspetterebbe 10
 secondi prima di uccidere il processo; con un init il segnale arriva a Python,
 che termina subito: lo stato si recupera a ogni riavvio, §4), volumi
 `./dati:/data` e `./config:/config:ro`, il log di Docker che ruota (`json-file`,
-tre file da 10 MB al massimo). Controllo di salute: il battito (un file che il
-ciclo tocca a ogni giro) ha meno di 2 minuti. Dopo aver corretto il roster o
+tre file da 10 MB al massimo). Il bot gira come utente 10001, senza privilegi,
+con il file system in sola lettura tranne `/data` e `/tmp`, senza capability, con
+256 MB di memoria e 64 processi al massimo; sul server `dati` è suo, e roster e
+frasi sono leggibili dal suo gruppo. Controllo di salute: il battito (un file che
+il ciclo tocca a ogni giro) ha meno di 2 minuti. Dopo aver corretto il roster o
 `prossima.env`, `docker compose up -d`: il riavvio automatico non rilegge
 `prossima.env`.
 

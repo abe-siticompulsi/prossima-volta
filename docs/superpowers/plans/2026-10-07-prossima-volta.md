@@ -5376,3 +5376,13 @@ sulle righe di configurazione, il conto delle righe e tre prove che uccidono
 mutazioni sopravvissute. Il nome del gruppo e i soprannomi restano nel
 repository, come in quello dei selfie: i soprannomi si cambiano nel roster, e il
 nome del gruppo il bot lo scrive solo in una frase, che ora sta nel file.
+
+### Dopo la pubblicazione: il container senza privilegi
+
+Dalla revisione di sicurezza del servizio dei selfie, lo stesso rinforzo anche
+qui: utente 10001 nel `Dockerfile` (servizio e prova), e in `compose.yaml`
+`read_only`, `tmpfs` per `/tmp`, `cap_drop: ALL`, `no-new-privileges`, 256 MB e
+64 processi. La guida fa di `dati` una cartella dell'utente 10001 e rende roster
+e frasi leggibili dal suo gruppo (640). Docker non c'è sul Mac:
+`tests/test_container.py` controlla solo il testo, l'avvio vero è fra i controlli
+a mano sul server.

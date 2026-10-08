@@ -13,6 +13,17 @@ services:
     volumes:
       - ./dati:/data
       - ./config:/config:ro
+    # Il container non cambia niente fuori da /data e /tmp, non ha privilegi da
+    # guadagnare, e non si porta dietro la macchina se qualcosa va storto.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    pids_limit: 64
     # Il log di Docker non cresce senza fine: tre file da 10 MB al massimo.
     logging:
       driver: json-file
