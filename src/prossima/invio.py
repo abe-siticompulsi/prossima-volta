@@ -107,6 +107,7 @@ class Invio:
         adesso: Callable[[], datetime],
         caso: Callable[[Sequence[str]], str],
         frasi: Sequence[str],
+        domanda: str,
     ) -> None:
         self._tg = telegram
         self._store = store
@@ -114,6 +115,7 @@ class Invio:
         self._adesso = adesso
         self._caso = caso
         self._frasi = tuple(frasi)
+        self._domanda = domanda
         self._pausa_fino_a: datetime | None = None
         self._avvisi = Avvisi(adesso)
 
@@ -182,7 +184,7 @@ class Invio:
                 self.avvisa("posta rimandata: %s", e)
         frase, nuovo_giro = self._frase()
         mandato = self._invia(
-            self._tg.manda_sondaggio, self._gruppo, testi.DOMANDA, testi.opzioni(sorted(date_), frase)
+            self._tg.manda_sondaggio, self._gruppo, self._domanda, testi.opzioni(sorted(date_), frase)
         )
         self._store.usa_frase(frase, nuovo_giro)
         return mandato, frase

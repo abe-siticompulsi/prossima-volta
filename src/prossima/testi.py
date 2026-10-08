@@ -19,7 +19,8 @@ from datetime import date, datetime, tzinfo
 from . import regole
 from .regole import Persona
 
-DOMANDA = "Prossima volta?"
+DOMANDA = "Prossima volta?"  # predefinita: `PV_DOMANDA` la cambia
+LUNGHEZZA_DOMANDA = 300  # il limite di Telegram per la domanda di un sondaggio
 LUNGHEZZA_OPZIONE = 100  # il limite di Telegram per il testo di un'opzione
 
 # Le frasi predefinite, quando `PV_FRASI` non c'è; con `PV_FRASI` le frasi

@@ -82,7 +82,7 @@ docker compose logs prossima
 ```
 
 Nel log, entro qualche secondo: «Prossima volta: @<nome_del_bot> nel gruppo
-<PV_GRUPPO>, 6 persone nel roster, frasi di «Nessuna»: <quante>». Un roster, un
+<PV_GRUPPO>, 6 persone nel roster, frasi di «Nessuna»: <quante>, domanda «Prossima volta?»». Un roster, un
 file delle frasi o un valore di `prossima.env` sbagliato ferma l'avvio con una riga «configurazione: …» che dice cosa
 correggere. Dopo aver corretto: `docker compose up -d`. Il riavvio automatico del
 container (`restart: unless-stopped`) non rilegge `prossima.env`: Docker lo legge
@@ -149,6 +149,22 @@ con una riga «configurazione: …» che dice quale riga correggere (dopo, di nu
 ha perso il gruppo (succede con un editor che lo riscrive da capo): `sudo chgrp
 10001 config/frasi.txt`, poi di nuovo `restart`. Il bot propone prima le frasi che non ha
 ancora usato in questo giro, quindi anche quelle nuove.
+
+## Cambiare la domanda
+
+La domanda del sondaggio sta in `config/prossima.env`, nella riga `PV_DOMANDA=`
+(senza, «Prossima volta?»). Dopo averla cambiata:
+
+```bash
+docker compose up -d
+docker compose logs --tail 5 prossima
+```
+
+Qui non basta `restart`: `prossima.env` Docker lo legge solo quando crea il
+container. La riga dell'avvio nel log riporta la domanda. Al massimo 300
+caratteri, un'emoji ne vale due; con un `#` nella domanda, mettila fra
+virgolette, altrimenti Docker legge il resto come un commento. Vale dal
+sondaggio seguente: quello aperto resta com'è.
 
 ## Se il bot resta bloccato
 

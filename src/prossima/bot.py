@@ -66,6 +66,7 @@ class Bot:
         adesso: Callable[[], datetime],
         caso: Callable[[Sequence[str]], str] = random.choice,
         frasi: Sequence[str] = testi.FRASI_NESSUNA,
+        domanda: str = testi.DOMANDA,
     ) -> None:
         self._store = store
         self._roster = roster
@@ -74,7 +75,13 @@ class Bot:
         self._fuso = fuso
         self._adesso = adesso
         self._invio = Invio(
-            telegram=telegram, store=store, gruppo=gruppo, adesso=adesso, caso=caso, frasi=frasi
+            telegram=telegram,
+            store=store,
+            gruppo=gruppo,
+            adesso=adesso,
+            caso=caso,
+            frasi=frasi,
+            domanda=domanda,
         )
         self._ripresa = Ripresa(
             invio=self._invio, store=store, roster=roster, fuso=fuso, adesso=adesso

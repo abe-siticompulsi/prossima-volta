@@ -89,7 +89,7 @@ e ignora i comandi rivolti ad altri bot.
 
 ### 3.2 Il sondaggio
 
-- Domanda: «Prossima volta?».
+- Domanda: quella di `PV_DOMANDA` (§5), di default «Prossima volta?».
 - Opzioni: le date come «mar 14/10», nel formato italiano (giorno abbreviato:
   lun mar mer gio ven sab dom; giorno e mese senza zeri iniziali), più in fondo una frase di «Nessuna di
   queste» (§3.6).
@@ -576,7 +576,8 @@ dopo un 429, gli avvisi), che le altre toccano solo attraverso i suoi metodi.
 **Configurazione** (`config/prossima.env`, mai nel repo):
 `PV_BOT_TOKEN`, `PV_GRUPPO` (l'identificativo del gruppo del party),
 `PV_ROSTER=/config/roster.toml`, `PV_FRASI=/config/frasi.txt` (facoltativa:
-senza, le frasi predefinite; §3.6), `PV_DB=/data/prossima.sqlite`,
+senza, le frasi predefinite; §3.6), `PV_DOMANDA` (facoltativa: la domanda del
+sondaggio, al massimo 300 caratteri; senza, «Prossima volta?»), `PV_DB=/data/prossima.sqlite`,
 `PV_BATTITO=/data/battito`, `PV_FUSO=Europe/Zurich`. Per il piano reale:
 `PV_REALE_CHAT` (l'identificativo di Alberto).
 

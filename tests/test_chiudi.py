@@ -771,3 +771,10 @@ def test_dopo_la_chiusura_niente_annunci(bot, telegram, aperto):
     assert telegram.scritti() == [
         "🔒 Sondaggio chiuso. Nessuna data con il master e quattro giocatori."
     ]
+
+
+def test_rimanda_usa_la_domanda_della_configurazione(riavvia, telegram, store):
+    bot = riavvia(domanda="Quando si gioca?")
+    bot.ricevi([comando("/sondaggio mar gio")])
+    bot.ricevi([comando("/chiudi rimanda")])
+    assert [s["domanda"] for s in telegram.di_tipo("manda_sondaggio")] == ["Quando si gioca?"] * 2

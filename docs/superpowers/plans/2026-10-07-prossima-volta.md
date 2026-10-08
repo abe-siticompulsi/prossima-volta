@@ -5400,3 +5400,12 @@ ritirare il voto intero: Telegram ha mandato le opzioni rimaste (`[0]`), un voto
 cambiato che il bot sostituisce al precedente come ogni altro. Il codice era già
 giusto; la prova adesso chiede anche questo passo (togli solo la terza, poi
 ritira il voto).
+
+### La domanda nella configurazione (2026-10-09)
+
+Richiesta di Alberto: la domanda del sondaggio si cambia senza toccare il
+codice. `PV_DOMANDA` in `prossima.env` (facoltativa; senza, «Prossima volta?»),
+al massimo 300 caratteri in UTF-16, controllata all'avvio senza ripeterne il
+valore nel messaggio d'errore; il bot la passa a `Invio`, che la usa per ogni
+sondaggio nuovo, anche nella ripresa e in `/chiudi rimanda`. La domanda come
+opzione di `/sondaggio`, per un sondaggio speciale, è rimandata a più avanti.

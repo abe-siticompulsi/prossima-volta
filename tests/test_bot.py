@@ -193,6 +193,16 @@ def test_le_frasi_della_configurazione(riavvia, telegram, store):
     assert store.frasi_usate() == {"Nessuna: uno"}
 
 
+def test_la_domanda_della_configurazione(riavvia, telegram):
+    riavvia(domanda="Quando si gioca?").ricevi([comando("/sondaggio mar")])
+    assert telegram.di_tipo("manda_sondaggio")[-1]["domanda"] == "Quando si gioca?"
+
+
+def test_la_domanda_predefinita(bot, telegram):
+    bot.ricevi([comando("/sondaggio mar")])
+    assert telegram.di_tipo("manda_sondaggio")[-1]["domanda"] == "Prossima volta?"
+
+
 def test_le_frasi_usate_che_non_ci_sono_piu_non_contano(riavvia, telegram, store):
     for frase in testi.FRASI_NESSUNA:
         store.usa_frase(frase)

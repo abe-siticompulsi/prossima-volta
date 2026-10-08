@@ -334,3 +334,12 @@ def test_avvia_usa_le_frasi_di_pv_frasi(tmp_path, caplog):
         principale.avvia({**ambiente(tmp_path), "PV_FRASI": str(frasi)}, telegram=telegram, fermo=fermo)
     assert [s["opzioni"][-1] for s in telegram.di_tipo("manda_sondaggio")] == ["Nessuna: solo questa"]
     assert "frasi di «Nessuna»: 1" in caplog.text
+
+
+def test_avvia_usa_la_domanda_di_pv_domanda(tmp_path, caplog):
+    fermo = threading.Event()
+    telegram = TelegramACicli(fermo, [[comando("/sondaggio mar")]])
+    with caplog.at_level(logging.INFO, logger="prossima"):
+        principale.avvia({**ambiente(tmp_path), "PV_DOMANDA": "Quando si gioca?"}, telegram=telegram, fermo=fermo)
+    assert [s["domanda"] for s in telegram.di_tipo("manda_sondaggio")] == ["Quando si gioca?"]
+    assert "domanda «Quando si gioca?»" in caplog.text

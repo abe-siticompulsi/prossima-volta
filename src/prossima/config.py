@@ -5,8 +5,9 @@ Sul server stanno in `config/prossima.env` (permessi 600), in
 queste»; nel repository ci sono solo gli esempi di `config.esempio/`, con
 identificativi finti. Un valore mancante o sbagliato ferma l'avvio con un
 messaggio che dice quale: mai un default silenzioso per un segreto, per il
-gruppo o per una persona. Le frasi sono l'unico valore con un default: senza
-`PV_FRASI`, quelle di `testi.FRASI_NESSUNA`.
+gruppo o per una persona. Le frasi e la domanda del sondaggio hanno un default:
+senza `PV_FRASI`, quelle di `testi.FRASI_NESSUNA`; senza `PV_DOMANDA`,
+`testi.DOMANDA`.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .regole import MASTER, RUOLI, Persona, Roster
-from .testi import FRASI_NESSUNA, LUNGHEZZA_OPZIONE, utf16
+from .testi import DOMANDA, FRASI_NESSUNA, LUNGHEZZA_DOMANDA, LUNGHEZZA_OPZIONE, utf16
 
 FUSO_PREDEFINITO = "Europe/Zurich"
 _CHIAVI_PERSONA = frozenset({"soprannome", "telegram_id", "ruolo", "chiude"})
@@ -40,6 +41,7 @@ class Impostazioni:
     battito: Path
     fuso: ZoneInfo
     frasi: tuple[str, ...]
+    domanda: str
 
 
 def _testo(env: Mapping[str, str], nome: str) -> str:
@@ -185,6 +187,21 @@ def frasi_da_ambiente(env: Mapping[str, str]) -> tuple[str, ...]:
     return leggi_frasi(Path(percorso)) if percorso else FRASI_NESSUNA
 
 
+def _domanda(env: Mapping[str, str]) -> str:
+    """La domanda del sondaggio, o quella predefinita. Il messaggio d'errore non
+    ripete il valore, come per le altre variabili."""
+    domanda = (env.get("PV_DOMANDA") or "").strip()
+    if not domanda:
+        return DOMANDA
+    lunghezza = utf16(domanda)
+    if lunghezza > LUNGHEZZA_DOMANDA:
+        raise ConfigurazioneErrata(
+            f"PV_DOMANDA: la domanda è lunga {lunghezza} caratteri, il massimo è "
+            f"{LUNGHEZZA_DOMANDA} (il limite di Telegram)"
+        )
+    return domanda
+
+
 def da_ambiente(env: Mapping[str, str]) -> Impostazioni:
     return Impostazioni(
         token_bot=_testo(env, "PV_BOT_TOKEN"),
@@ -194,4 +211,5 @@ def da_ambiente(env: Mapping[str, str]) -> Impostazioni:
         battito=Path(_testo(env, "PV_BATTITO")),
         fuso=_fuso(env),
         frasi=frasi_da_ambiente(env),
+        domanda=_domanda(env),
     )

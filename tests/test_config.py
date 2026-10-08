@@ -94,6 +94,7 @@ def test_le_impostazioni_dall_ambiente(tmp_path):
         battito=tmp_path / "battito",
         fuso=ZoneInfo("Europe/Zurich"),
         frasi=testi.FRASI_NESSUNA,
+        domanda=testi.DOMANDA,
     )
 
 
@@ -238,3 +239,23 @@ def test_l_env_d_esempio_non_passa_per_un_file_di_frasi():
         config.leggi_frasi(RADICE / "config.esempio" / "prossima.env")
     with pytest.raises(ConfigurazioneErrata, match="sembra una riga di configurazione"):
         config.leggi_frasi(RADICE / "config.esempio" / "roster.toml")
+
+
+def test_senza_pv_domanda_la_domanda_predefinita(tmp_path):
+    assert config.da_ambiente(ambiente(tmp_path)).domanda == "Prossima volta?"
+    assert config.da_ambiente(ambiente(tmp_path, PV_DOMANDA="  ")).domanda == "Prossima volta?"
+
+
+def test_la_domanda_da_pv_domanda(tmp_path):
+    imp = config.da_ambiente(ambiente(tmp_path, PV_DOMANDA="  Quando si gioca? 🎲 "))
+    assert imp.domanda == "Quando si gioca? 🎲"
+
+
+def test_una_domanda_oltre_300_caratteri(tmp_path):
+    """Il limite di Telegram per la domanda di un sondaggio, contato in UTF-16
+    come le opzioni: 299 lettere e un'emoji fanno 301. Il messaggio non ripete
+    il valore, come per le altre variabili."""
+    config.da_ambiente(ambiente(tmp_path, PV_DOMANDA="x" * 298 + "🎲"))
+    with pytest.raises(ConfigurazioneErrata, match="PV_DOMANDA: la domanda è lunga 301 caratteri, il massimo è 300") as errore:
+        config.da_ambiente(ambiente(tmp_path, PV_DOMANDA="x" * 299 + "🎲"))
+    assert "xxx" not in str(errore.value)
