@@ -142,12 +142,14 @@ def avvia(env: Mapping[str, str], *, telegram=None, fermo: threading.Event | Non
         nome=nome,
         fuso=imp.fuso,
         adesso=lambda: datetime.now(UTC),
+        frasi=imp.frasi,
     )
     log.info(
-        "Prossima volta: @%s nel gruppo %s, %d persone nel roster",
+        "Prossima volta: @%s nel gruppo %s, %d persone nel roster, frasi di «Nessuna»: %d",
         nome,
         imp.gruppo,
         len(imp.roster.persone),
+        len(imp.frasi),
     )
     ciclo(telegram, bot, store, imp.battito, fermo or threading.Event())
 

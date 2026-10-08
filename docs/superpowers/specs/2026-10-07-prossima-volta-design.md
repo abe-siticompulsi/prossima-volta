@@ -30,7 +30,7 @@ suo, un container suo, sulla stessa macchina dei selfie.
 | **Bot nuovo, repo nuovo, container nuovo** | I selfie restano intoccati: un errore qui non ferma la validazione delle foto la sera della partita. |
 | **Privacy del bot attiva** | Il bot riceve solo i comandi rivolti a lui e i voti dei suoi sondaggi: non legge la chat. |
 | **Nessun gruppo di prova** | Richiesta di Alberto: «siamo tra amici, per testare servono le persone vere». Il piano reale gira nella chat privata di Alberto con il bot. |
-| **Frasi di «Nessuna di queste» da una lista scritta a mano** | Prevedibili, lette da Alberto prima che arrivino nel gruppo. Ollama (nella rete locale) è una possibile aggiunta futura, fuori da questa spec. |
+| **Frasi di «Nessuna di queste» da una lista scritta a mano** | Prevedibili, lette da Alberto prima che arrivino nel gruppo. La lista sta in un file sul server: si cambia senza toccare il codice, e le battute sulle persone del gruppo restano fuori dal repository. Ollama (nella rete locale) è una possibile aggiunta futura, fuori da questa spec. |
 | **Ogni messaggio afferma solo ciò che è verificato** | La regola di tutti i progetti di Alberto. |
 
 ## 3. Il comportamento
@@ -173,11 +173,25 @@ si annuncia anche senza un voto nuovo.
 
 ### 3.6 «Nessuna di queste»
 
-Una lista di frasi in `testi.py`, tutte di al massimo 100 caratteri (il limite
-di Telegram per un'opzione) e tutte comincianti con «Nessuna». Il bot ne usa una
-per sondaggio, a caso fra quelle non ancora usate; finite tutte, ricomincia, ma
-non con l'ultima usata (e il giro nuovo comincia solo se il sondaggio parte). Le
-frasi usate stanno nel database. La lista iniziale (Alberto la correggerà):
+Le frasi stanno in un file sul server, `config/frasi.txt` (`PV_FRASI`), una
+per riga: si cambiano con un riavvio del servizio, senza toccare il codice, e le
+battute sulle persone del gruppo restano fuori dal repository. Le righe vuote e
+quelle che cominciano con # non contano, gli spazi intorno a una frase si
+tolgono; le righe sono quelle dell'editor (finiscono con un a capo). Il file è
+in UTF-8, anche con il BOM. Ogni frase ha al massimo 100 caratteri (il limite di
+Telegram per un'opzione), contati in UTF-16 come le menzioni: un'emoji ne vale
+due. Come per il roster, l'avvio si ferma con un messaggio che dice il file e,
+se serve, la riga: se il file manca o non è UTF-8, se una frase è troppo lunga o
+ripetuta, se non c'è nessuna frase, o se una riga sembra di configurazione
+(«NOME=valore»: `PV_FRASI` che indica per sbaglio `prossima.env` metterebbe il
+token in un sondaggio; il messaggio non ripete la riga). Senza `PV_FRASI` il
+bot usa le frasi predefinite di `testi.py`, le stesse di
+`config.esempio/frasi.txt`, tutte comincianti con «Nessuna».
+
+Il bot ne usa una per sondaggio, a caso fra quelle non ancora usate; finite
+tutte, ricomincia, ma non con l'ultima usata (e il giro nuovo comincia solo se il
+sondaggio parte). Le frasi usate stanno nel database; quelle che non sono più
+nel file non contano. Le frasi predefinite:
 
 1. Nessuna: ho fallito il tiro salvezza contro la vita reale
 2. Nessuna: ho tirato 1 sul calendario
@@ -543,10 +557,10 @@ httpx, `tzdata` (il fuso nel container). Nessuna parte web, nessuna porta.
 | file | compito |
 |---|---|
 | `src/prossima/regole.py` | Puro: date (default, giorni, date, rifiuti), etichette, conteggi, classificazione (possibile, quasi, fuori), impossibile, e `annunci_da_fare(stato, fatti) -> list[Annuncio]`. |
-| `src/prossima/testi.py` | I testi dei messaggi, con le menzioni come entità (scostamenti UTF-16), e le frasi di «Nessuna». |
+| `src/prossima/testi.py` | I testi dei messaggi, con le menzioni come entità (scostamenti UTF-16), e le frasi predefinite di «Nessuna». |
 | `src/prossima/store.py` | SQLite: sondaggi, voti (di tutti), annunci fatti, frasi usate, offset del bot, momento dell'ultima lettura. Una connessione per operazione, WAL. |
 | `src/prossima/telegram.py` | Il client: `aggiornamenti`, `io` (getMe), `manda_sondaggio`, `scrivi` (con entità e risposta a un messaggio), `ferma_sondaggio`, `registra_comandi`. Errori `TelegramError` senza token; `TelegramTroppeRichieste` con `retry_after`. |
-| `src/prossima/config.py` | Variabili d'ambiente e roster. |
+| `src/prossima/config.py` | Variabili d'ambiente, roster e file delle frasi di «Nessuna». |
 | `src/prossima/bot.py` | Smista gli aggiornamenti (comandi, `poll_answer`) e collega le parti: il giro (`ricevi`, `manda`), `/sondaggio`, i voti (anche per un sondaggio sconosciuto), gli annunci. |
 | `src/prossima/chiusura.py` | `/chiudi` (le date possibili, la data tenuta, `rimanda`), la chiusura in sospeso e i suoi tentativi, il completamento (§3.7). |
 | `src/prossima/ripresa.py` | La ripresa dopo il buio, un passo alla volta (§3.8). |
@@ -561,9 +575,13 @@ dopo un 429, gli avvisi), che le altre toccano solo attraverso i suoi metodi.
 
 **Configurazione** (`config/prossima.env`, mai nel repo):
 `PV_BOT_TOKEN`, `PV_GRUPPO` (l'identificativo del gruppo del party),
-`PV_ROSTER=/config/roster.toml`, `PV_DB=/data/prossima.sqlite`,
+`PV_ROSTER=/config/roster.toml`, `PV_FRASI=/config/frasi.txt` (facoltativa:
+senza, le frasi predefinite; §3.6), `PV_DB=/data/prossima.sqlite`,
 `PV_BATTITO=/data/battito`, `PV_FUSO=Europe/Zurich`. Per il piano reale:
 `PV_REALE_CHAT` (l'identificativo di Alberto).
+
+**Frasi** (`config/frasi.txt`, mai nel repo; nel repo `config.esempio/frasi.txt`
+con le frasi predefinite).
 
 **Roster** (`config/roster.toml`, mai nel repo; nel repo solo
 `config.esempio/roster.toml` con identificativi finti):
@@ -609,9 +627,10 @@ gruppo del party. All'avvio registra i comandi (`setMyCommands`): `sondaggio`
     data); `annunci_da_fare` (ogni annuncio una volta, «non più possibile» con
     chi ha tolto il voto, «possibile» di nuovo dopo).
   - testi: le menzioni cadono sui nomi giusti con emoji davanti (UTF-16); tutte
-    le frasi di «Nessuna» stanno nei 100 caratteri e cominciano con «Nessuna»;
-    rotazione senza ripetizioni.
-  - store, config (roster sbagliati), client Telegram con un trasporto finto di
+    le frasi predefinite di «Nessuna» stanno nei 100 caratteri e cominciano con
+    «Nessuna»; rotazione senza ripetizioni, nella lista che il bot riceve.
+  - store, config (roster sbagliati; frasi troppo lunghe, ripetute, assenti, o
+    un file di configurazione al posto di quello delle frasi), client Telegram con un trasporto finto di
     httpx (nessun token nei messaggi d'errore).
   - il percorso completo nel bot: `/sondaggio`, voti, annunci, `/chiudi` nelle tre
     forme, rifiuti, invio fallito e ripreso, ripresa dopo il buio (conteggi
@@ -621,7 +640,8 @@ gruppo del party. All'avvio registra i comandi (`setMyCommands`): `sondaggio`
   rubano gli aggiornamenti): sondaggio non anonimo a risposta multipla, il voto
   di Alberto che arriva come `poll_answer` con il suo identificativo e le
   opzioni, un messaggio con una menzione, `stopPoll` con i conteggi, un
-  sondaggio con 11 opzioni (10 date e «Nessuna»), `stopPoll` su un messaggio
+  sondaggio con 11 opzioni (10 date e, fra le frasi che il servizio usa, quella
+  con più byte), `stopPoll` su un messaggio
   cancellato e su un sondaggio già fermato (le descrizioni degli errori che il
   client riconosce), `setMyCommands`. Salta per ogni variabile mancante
   (`PV_BOT_TOKEN`, `PV_GRUPPO`, `PV_ROSTER`, `PV_DB`, `PV_BATTITO`,

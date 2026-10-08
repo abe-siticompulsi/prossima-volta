@@ -323,14 +323,23 @@ def test_le_frasi_ruotano_senza_ripetersi_e_poi_ricominciano():
     caso = random.Random(7).choice
     usate: set[str] = set()
     for _ in testi.FRASI_NESSUNA:
-        frase = testi.scegli_frase(usate, caso)
+        frase = testi.scegli_frase(testi.FRASI_NESSUNA, usate, caso)
         assert frase not in usate
         usate.add(frase)
     assert usate == set(testi.FRASI_NESSUNA)
     # finite tutte: una qualsiasi, e chi la sceglie ricomincia il giro
-    assert testi.scegli_frase(usate, caso) in testi.FRASI_NESSUNA
+    assert testi.scegli_frase(testi.FRASI_NESSUNA, usate, caso) in testi.FRASI_NESSUNA
 
 
 def test_scegli_frase_sceglie_fra_le_restanti():
     usate = set(testi.FRASI_NESSUNA[1:])
-    assert testi.scegli_frase(usate, lambda restanti: restanti[0]) == testi.FRASI_NESSUNA[0]
+    primo = lambda restanti: restanti[0]  # noqa: E731
+    assert testi.scegli_frase(testi.FRASI_NESSUNA, usate, primo) == testi.FRASI_NESSUNA[0]
+
+
+def test_scegli_frase_sceglie_nella_lista_che_riceve():
+    primo = lambda restanti: restanti[0]  # noqa: E731
+    assert testi.scegli_frase(("Nessuna: a", "Nessuna: b"), {"Nessuna: a"}, primo) == "Nessuna: b"
+    # usate tutte, o usate solo frasi che non ci sono più: si sceglie fra tutte
+    assert testi.scegli_frase(("Nessuna: a", "Nessuna: b"), {"Nessuna: a", "Nessuna: b"}, primo) == "Nessuna: a"
+    assert testi.scegli_frase(("Nessuna: a",), {testi.FRASI_NESSUNA[0]}, primo) == "Nessuna: a"

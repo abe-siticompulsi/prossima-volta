@@ -10,12 +10,13 @@ Un test chiede ad Alberto di votare: la domanda del sondaggio dice cosa fare,
 e il test aspetta fino a tre minuti.
 """
 
+import os
 import time
 from datetime import date, timedelta
 
 import pytest
 
-from prossima import regole, testi
+from prossima import config, regole, testi
 from prossima.bot import COMANDI
 from prossima.regole import Persona
 from prossima.telegram import BotTelegram, MessaggioSparito, SondaggioGiaChiuso, TelegramRifiuto
@@ -28,6 +29,15 @@ ATTESA_VOTI = 180  # secondi
 
 def bot() -> BotTelegram:
     return BotTelegram(richiesta("PV_BOT_TOKEN"))
+
+
+def frase_piu_lunga() -> str:
+    """Fra le frasi che il servizio usa (dal file di `PV_FRASI`, o le
+    predefinite se la variabile non c'è), quella con più byte in UTF-8. Come
+    Telegram conti i 100 caratteri di un'opzione non è scritto: in caratteri, in
+    UTF-16 (come il bot) o in byte, la frase con più byte è quella che rischia
+    di più."""
+    return max(config.frasi_da_ambiente(os.environ), key=lambda frase: len(frase.encode()))
 
 
 def chat() -> int:
@@ -81,12 +91,13 @@ def test_una_menzione_dopo_un_emoji_cade_sul_nome():
 
 def test_un_sondaggio_con_undici_opzioni_parte():
     """Contratto: Telegram accetta un sondaggio con 11 opzioni (10 date e la
-    frase di «Nessuna» più lunga, di al massimo 100 caratteri), non anonimo e a
-    risposta multipla. Non serve votare: `stopPoll` dà un conteggio per ognuna."""
+    frase di «Nessuna» più lunga fra quelle vere, di al massimo 100 caratteri),
+    non anonimo e a risposta multipla. Non serve votare: `stopPoll` dà un
+    conteggio per ognuna."""
     b = bot()
     date_ = [date.today() + timedelta(days=i) for i in range(1, regole.MASSIMO_DATE + 1)]
-    frase = max(testi.FRASI_NESSUNA, key=len)
-    assert len(frase) <= testi.LUNGHEZZA_OPZIONE
+    frase = frase_piu_lunga()
+    assert testi.utf16(frase) <= testi.LUNGHEZZA_OPZIONE
     mandato = b.manda_sondaggio(
         chat(), "🧪 Prova di Prossima volta: 11 opzioni, non serve votare.", testi.opzioni(date_, frase)
     )
@@ -100,7 +111,7 @@ def test_sondaggio_voto_ritiro_e_conteggi():
     con le opzioni vuote; `stopPoll` dà i conteggi per opzione, in ordine."""
     b = bot()
     date_ = [date.today() + timedelta(days=i) for i in range(1, regole.MASSIMO_DATE + 1)]
-    frase = max(testi.FRASI_NESSUNA, key=len)
+    frase = frase_piu_lunga()
     mandato = b.manda_sondaggio(
         chat(),
         "🧪 Prova di Prossima volta: spunta la prima e la terza data e vota; "

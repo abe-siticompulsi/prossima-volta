@@ -35,19 +35,20 @@ def telegram():
 def riavvia(telegram, store, orologio):
     """Un bot nuovo sugli stessi Telegram, database e orologio: il processo
     ripartito. `caso` sceglie sempre la prima frase restante: le prove sanno
-    quale arriva."""
+    quale arriva. `riavvia(frasi=...)` cambia un argomento del bot."""
 
-    def nuovo() -> Bot:
-        return Bot(
-            telegram=telegram,
-            store=store,
-            roster=ROSTER,
-            gruppo=GRUPPO,
-            nome=NOME,
-            fuso=ZURIGO,
-            adesso=orologio,
-            caso=lambda restanti: restanti[0],
-        )
+    def nuovo(**cambi) -> Bot:
+        argomenti = {
+            "telegram": telegram,
+            "store": store,
+            "roster": ROSTER,
+            "gruppo": GRUPPO,
+            "nome": NOME,
+            "fuso": ZURIGO,
+            "adesso": orologio,
+            "caso": lambda restanti: restanti[0],
+        }
+        return Bot(**{**argomenti, **cambi})
 
     return nuovo
 

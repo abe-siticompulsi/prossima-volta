@@ -36,6 +36,7 @@ mkdir -p config dati
 ```bash
 cp config.esempio/prossima.env config/prossima.env
 cp config.esempio/roster.toml config/roster.toml
+cp config.esempio/frasi.txt config/frasi.txt
 chmod 600 config/prossima.env config/roster.toml
 ```
 
@@ -43,6 +44,10 @@ In `config/prossima.env` metti il token. In `config/roster.toml` metti gli
 identificativi Telegram veri delle sei persone (i numeri: li ha già il roster di
 `ctc`, sul Mac in `~/.config/close-the-circle/roster.toml`, chiave
 `telegram_id`).
+
+In `config/frasi.txt` ci sono le frasi di «Nessuna di queste»: quelle d'esempio,
+a cui aggiungere quelle che nel repository non stanno, come le battute sulle
+persone del gruppo. Le regole sono in testa al file.
 
 L'identificativo del gruppo è nello stesso roster di `ctc`, chiave `party` in
 `[gruppi]`. Se preferisci leggerlo da Telegram: scrivi nel gruppo
@@ -67,8 +72,8 @@ docker compose logs prossima
 ```
 
 Nel log, entro qualche secondo: «Prossima volta: @<nome_del_bot> nel gruppo
-<PV_GRUPPO>, 6 persone nel roster». Un roster o un valore di `prossima.env`
-sbagliato ferma l'avvio con una riga «configurazione: …» che dice cosa
+<PV_GRUPPO>, 6 persone nel roster, frasi di «Nessuna»: <quante>». Un roster, un
+file delle frasi o un valore di `prossima.env` sbagliato ferma l'avvio con una riga «configurazione: …» che dice cosa
 correggere. Dopo aver corretto: `docker compose up -d`. Il riavvio automatico del
 container (`restart: unless-stopped`) non rilegge `prossima.env`: Docker lo legge
 quando crea il container, e solo `up -d` ne crea uno nuovo.
@@ -117,6 +122,21 @@ minuti: fai quello che dice la domanda (spunta la prima e la terza data e vota,
 ritira il voto, spunta la seconda e vota). Il piano reale è verde solo se **non
 salta niente**: un test saltato non è un test superato, e `-rs` dice quale
 variabile mancava.
+
+## Cambiare le frasi
+
+Modifica `config/frasi.txt` e riavvia il servizio:
+
+```bash
+docker compose restart prossima
+docker compose logs --tail 5 prossima
+```
+
+Basta `restart`: il file lo legge il bot quando parte. La riga dell'avvio nel
+log dice quante frasi ha letto; una frase troppo lunga o ripetuta ferma l'avvio
+con una riga «configurazione: …» che dice quale riga correggere (dopo, di nuovo
+`docker compose restart prossima`). Il bot propone prima le frasi che non ha
+ancora usato in questo giro, quindi anche quelle nuove.
 
 ## Se il bot resta bloccato
 

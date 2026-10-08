@@ -1,0 +1,25 @@
+# Le frasi di «Nessuna di queste», l'ultima opzione di ogni sondaggio.
+# Copia in config/frasi.txt sul server e cambiale come vuoi: ci vanno anche le
+# battute sulle persone del gruppo, che nel repository non stanno.
+#
+# Una frase per riga, di al massimo 100 caratteri (il limite di Telegram per
+# un'opzione; un'emoji ne conta due). Le righe vuote e quelle che cominciano
+# con # non contano. Meglio se cominciano con «Nessuna», così il sondaggio si
+# capisce da solo. Il bot le usa a turno, a caso, senza ripeterle finché non
+# le ha usate tutte. Dopo una modifica: docker compose restart prossima
+
+Nessuna: ho fallito il tiro salvezza contro la vita reale
+Nessuna: ho tirato 1 sul calendario
+Nessuna: il destino ha tirato con svantaggio
+Nessuna: ho perso l'iniziativa contro la mia agenda
+Nessuna: un mimic travestito da agenda si è mangiato la settimana
+Nessuna: questa settimana i danni radiosi me li fa il lavoro
+Nessuna: riposo lungo. Molto lungo.
+Nessuna: ho perso la concentrazione, e con lei la settimana
+Nessuna: il mio slot del martedì è esaurito
+Nessuna: questa settimana sono un PNG
+Nessuna: il mio personaggio è in un semipiano senza calendario
+Nessuna: il master può dire che il mio personaggio dorme
+Nessuna: lancio Velocità sulla settimana dopo
+Nessuna: 20 naturale per trovare una scusa
+Nessuna: il bardo scriverà comunque una canzone sulla mia assenza

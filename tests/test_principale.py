@@ -323,3 +323,14 @@ def test_avvia_collega_il_ciclo_il_battito_e_il_gruppo(tmp_path):
     principale.avvia(ambiente(tmp_path), telegram=telegram, fermo=fermo)
     assert (tmp_path / "battito").exists()
     assert [s["chat_id"] for s in telegram.di_tipo("manda_sondaggio")] == [GRUPPO]
+
+
+def test_avvia_usa_le_frasi_di_pv_frasi(tmp_path, caplog):
+    frasi = tmp_path / "frasi.txt"
+    frasi.write_text("Nessuna: solo questa\n", encoding="utf-8")
+    fermo = threading.Event()
+    telegram = TelegramACicli(fermo, [[comando("/sondaggio mar")]])
+    with caplog.at_level(logging.INFO, logger="prossima"):
+        principale.avvia({**ambiente(tmp_path), "PV_FRASI": str(frasi)}, telegram=telegram, fermo=fermo)
+    assert [s["opzioni"][-1] for s in telegram.di_tipo("manda_sondaggio")] == ["Nessuna: solo questa"]
+    assert "frasi di «Nessuna»: 1" in caplog.text

@@ -106,12 +106,14 @@ class Invio:
         gruppo: int,
         adesso: Callable[[], datetime],
         caso: Callable[[Sequence[str]], str],
+        frasi: Sequence[str],
     ) -> None:
         self._tg = telegram
         self._store = store
         self._gruppo = gruppo
         self._adesso = adesso
         self._caso = caso
+        self._frasi = tuple(frasi)
         self._pausa_fino_a: datetime | None = None
         self._avvisi = Avvisi(adesso)
 
@@ -189,9 +191,9 @@ class Invio:
         """La frase di «Nessuna» per il prossimo sondaggio, e se comincia un giro
         nuovo: finite tutte si ricomincia, ma non con l'ultima usata."""
         usate = self._store.frasi_usate()
-        if usate >= set(testi.FRASI_NESSUNA):
-            return testi.scegli_frase({self._store.ultima_frase()}, self._caso), True
-        return testi.scegli_frase(usate, self._caso), False
+        if usate >= set(self._frasi):
+            return testi.scegli_frase(self._frasi, {self._store.ultima_frase()}, self._caso), True
+        return testi.scegli_frase(self._frasi, usate, self._caso), False
 
     def _invia(self, chiamata, *argomenti):
         """Ogni chiamata che scrive su Telegram passa di qui: dopo un 429, niente

@@ -5358,3 +5358,21 @@ Decisioni del controllore; la spec è aggiornata (§4, §5), con la guida e le d
 - **`prossima sblocca` non chiude un sondaggio sano.** Chiude il sondaggio aperto solo se la chiusura in sospeso o la ripresa che ha tolto erano sue; altrimenti non cambia niente e dice «niente da sbloccare: nessuna chiusura in sospeso, nessuna ripresa» (il testo di prima diceva anche «nessun sondaggio aperto», che con un sondaggio sano aperto sarebbe falso). Così il comando si può provare senza rischi.
 - **Guida §6**: torna `--profile prova`, `docker compose --profile prova run --rm --build prova` (anche nella docstring di `tests/reale/test_configurazione.py` e nelle differenze).
 - **Prove**: 438 prove veloci.
+
+### Dopo la fusione: le frasi di «Nessuna» in un file sul server
+
+Richiesta di Alberto prima di pubblicare il repository: via dal codice e dalla
+storia (riscritta prima del primo push) le sette frasi con le battute sulle
+persone del gruppo, e le frasi in un file di configurazione. `PV_FRASI`
+(facoltativa) indica il file, `config/frasi.txt` sul server; senza, le 15 frasi
+predefinite di `testi.FRASI_NESSUNA`, le stesse di `config.esempio/frasi.txt`.
+`config.leggi_frasi` rifiuta le frasi oltre 100 caratteri (in UTF-16), i doppioni,
+un file senza frasi e le righe «NOME=valore» (`PV_FRASI` che indica per sbaglio
+`prossima.env` metterebbe il token in un sondaggio), dicendo la riga, contata
+solo sugli a capo; il bot passa le frasi a `Invio`, e `testi.scegli_frase`
+sceglie nella lista che riceve. Il piano reale manda, fra le frasi che il
+servizio usa, quella con più byte. La revisione del commit ha portato la guardia
+sulle righe di configurazione, il conto delle righe e tre prove che uccidono
+mutazioni sopravvissute. Il nome del gruppo e i soprannomi restano nel
+repository, come in quello dei selfie: i soprannomi si cambiano nel roster, e il
+nome del gruppo il bot lo scrive solo in una frase, che ora sta nel file.

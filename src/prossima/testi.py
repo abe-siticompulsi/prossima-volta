@@ -1,4 +1,4 @@
-"""I testi che il bot scrive, e le frasi di «Nessuna di queste».
+"""I testi che il bot scrive, e le frasi predefinite di «Nessuna di queste».
 
 Testo semplice, senza `parse_mode`. Le menzioni sono entità `text_mention` con
 l'identificativo Telegram della persona: notificano anche chi non ha un nome
@@ -22,6 +22,8 @@ from .regole import Persona
 DOMANDA = "Prossima volta?"
 LUNGHEZZA_OPZIONE = 100  # il limite di Telegram per il testo di un'opzione
 
+# Le frasi predefinite, quando `PV_FRASI` non c'è; con `PV_FRASI` le frasi
+# stanno in un file sul server (spec §3.6).
 FRASI_NESSUNA = (
     "Nessuna: ho fallito il tiro salvezza contro la vita reale",
     "Nessuna: ho tirato 1 sul calendario",
@@ -106,11 +108,13 @@ def opzioni(date_sondaggio: Sequence[date], frase: str) -> list[str]:
     return [regole.etichetta(g) for g in date_sondaggio] + [frase]
 
 
-def scegli_frase(usate: Collection[str], caso: Callable[[Sequence[str]], str]) -> str:
-    """Una frase di «Nessuna», a caso fra quelle non ancora usate. Se sono state
-    usate tutte, a caso fra tutte: chi la sceglie dimentica le usate e ricomincia."""
-    restanti = [f for f in FRASI_NESSUNA if f not in usate]
-    return caso(restanti or list(FRASI_NESSUNA))
+def scegli_frase(
+    frasi: Sequence[str], usate: Collection[str], caso: Callable[[Sequence[str]], str]
+) -> str:
+    """Una delle `frasi`, a caso fra quelle non ancora usate. Se sono state usate
+    tutte, a caso fra tutte: chi la sceglie dimentica le usate e ricomincia."""
+    restanti = [f for f in frasi if f not in usate]
+    return caso(restanti or list(frasi))
 
 
 # --- gli annunci

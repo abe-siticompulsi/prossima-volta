@@ -9,7 +9,7 @@ smentisce una.
 | Nei test | Nella realtà | Dove si verifica |
 |---|---|---|
 | Telegram risponde subito e con `ok: true` (`TelegramFinto`), salvo i guasti che la prova imposta. | Può fallire, rallentare, rifiutare (4xx) o chiedere di aspettare (429 con `retry_after`). | `tests/test_telegram.py` legge le risposte d'errore nella forma documentata dall'API. Un 429 vero non si provoca: vorrebbe dire inondare il bot. |
-| Un sondaggio non anonimo, a risposta multipla, con fino a 11 opzioni (10 date e la frase di «Nessuna») parte, e il voto si può cambiare. | Il massimo di opzioni lo decide Telegram e finora non è stato verificato (**da confermare** con il piano reale): 11 devono passare. Ogni opzione ha al massimo 100 caratteri; `allows_revoting` è vero per default nei sondaggi normali, e il bot lo chiede comunque. Che un sondaggio non anonimo parta anche in una chat privata non è scritto da nessuna parte. | `tests/reale/test_telegram_vero.py::test_un_sondaggio_con_undici_opzioni_parte`: 10 date e la frase più lunga, senza votare, nella chat privata di Alberto; e `test_sondaggio_voto_ritiro_e_conteggi`, che con le stesse 11 opzioni aspetta i voti. |
+| Un sondaggio non anonimo, a risposta multipla, con fino a 11 opzioni (10 date e la frase di «Nessuna») parte, e il voto si può cambiare. | Il massimo di opzioni lo decide Telegram e finora non è stato verificato (**da confermare** con il piano reale): 11 devono passare. Ogni opzione ha al massimo 100 caratteri: come li conti Telegram non è scritto. Il bot li conta in UTF-16 (un'emoji ne vale due), più severo che contare i caratteri; se Telegram contasse i byte, una frase con molte lettere accentate passerebbe il controllo del bot e Telegram la rifiuterebbe. `allows_revoting` è vero per default nei sondaggi normali, e il bot lo chiede comunque. Che un sondaggio non anonimo parta anche in una chat privata non è scritto da nessuna parte. | `tests/reale/test_telegram_vero.py::test_un_sondaggio_con_undici_opzioni_parte`: 10 date e, fra le frasi che il servizio usa (quelle di `PV_FRASI`, o le predefinite), quella con più byte, senza votare, nella chat privata di Alberto; e `test_sondaggio_voto_ritiro_e_conteggi`, che con le stesse 11 opzioni aspetta i voti. |
 | Un voto arriva come `poll_answer` con l'identificativo di chi vota (`user.id`) e le opzioni spuntate, contate da 0; il voto ritirato arriva con `option_ids` vuoto. | Telegram manda i voti a un bot solo per i sondaggi non anonimi creati da lui. | Il piano reale: Alberto vota, ritira il voto e vota di nuovo. |
 | `stopPoll` restituisce i conteggi per opzione, nell'ordine delle opzioni. | L'API restituisce il `Poll` fermato, con `voter_count` per opzione («may be 0 if unknown»). | Il piano reale, dopo il voto di Alberto. |
 | Un sondaggio cancellato fa rispondere a `stopPoll` «message to stop not found», che il client riconosce come `MessaggioSparito`. | La descrizione la sceglie Telegram, e non è documentata. | `tests/reale/test_telegram_vero.py::test_fermare_un_sondaggio_cancellato`: il bot manda un sondaggio, lo cancella e prova a fermarlo. |
@@ -37,6 +37,9 @@ smentisce una.
 - Dopo aver corretto `config/roster.toml` o `config/prossima.env`, `docker compose
   up -d` fa ripartire il servizio con i valori nuovi; il riavvio automatico non
   rilegge `prossima.env`.
+- Dopo aver cambiato `config/frasi.txt`, basta `docker compose restart
+  prossima`: la cartella `config` è montata nel container e il bot legge il file
+  quando parte. La riga dell'avvio nel log dice quante frasi ha letto.
 
 ## Da controllare a mano nel gruppo
 

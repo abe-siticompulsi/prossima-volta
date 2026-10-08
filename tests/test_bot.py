@@ -179,6 +179,29 @@ def test_finite_le_frasi_il_giro_ricomincia_solo_se_il_sondaggio_parte(bot, tele
     assert store.frasi_usate() == set(testi.FRASI_NESSUNA)
 
 
+FRASI = ("Nessuna: uno", "Nessuna: due")
+
+
+def test_le_frasi_della_configurazione(riavvia, telegram, store):
+    bot = riavvia(frasi=FRASI)
+    for _ in range(3):
+        bot.ricevi([comando("/sondaggio mar")])
+        aperto = store.sondaggio_aperto()
+        store.chiudi_sondaggio(aperto.id, aperto.aperto_alle)
+    # finite le due, si ricomincia
+    assert [s["opzioni"][-1] for s in telegram.sondaggi] == ["Nessuna: uno", "Nessuna: due", "Nessuna: uno"]
+    assert store.frasi_usate() == {"Nessuna: uno"}
+
+
+def test_le_frasi_usate_che_non_ci_sono_piu_non_contano(riavvia, telegram, store):
+    for frase in testi.FRASI_NESSUNA:
+        store.usa_frase(frase)
+    riavvia(frasi=FRASI).ricevi([comando("/sondaggio mar")])
+    assert telegram.ultimo_sondaggio["opzioni"][-1] == "Nessuna: uno"
+    # nessun giro nuovo: le frasi del file non sono state usate tutte
+    assert store.frasi_usate() == set(testi.FRASI_NESSUNA) | {"Nessuna: uno"}
+
+
 def test_le_opzioni_sono_in_ordine_di_data(bot, telegram):
     # i comandi danno già le date in ordine, ma i voti si leggono per indice e
     # lo store le salva ordinate: il sondaggio non si fida di chi lo chiama

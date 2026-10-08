@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from prossima import config
+from prossima import config, testi
 from prossima.config import ConfigurazioneErrata
 from tests.tavolo import ROSTER
 
@@ -93,6 +93,7 @@ def test_le_impostazioni_dall_ambiente(tmp_path):
         db=tmp_path / "prossima.sqlite",
         battito=tmp_path / "battito",
         fuso=ZoneInfo("Europe/Zurich"),
+        frasi=testi.FRASI_NESSUNA,
     )
 
 
@@ -155,3 +156,85 @@ def test_ruolo_mancante_nel_roster():
     testo = roster(p()) + '[[persona]]\nsoprannome = "emi"\ntelegram_id = 3\n'
     with pytest.raises(ConfigurazioneErrata, match=r"persona 2 \(emi\).*ruolo.*manca"):
         config.roster_da_toml(testo, "config/roster.toml")
+
+
+def test_senza_pv_frasi_le_frasi_predefinite(tmp_path):
+    assert config.da_ambiente(ambiente(tmp_path)).frasi == testi.FRASI_NESSUNA
+    assert config.da_ambiente(ambiente(tmp_path, PV_FRASI="  ")).frasi == testi.FRASI_NESSUNA
+
+
+def test_le_frasi_da_pv_frasi(tmp_path):
+    """Una frase per riga; le righe vuote (anche di soli spazi) e quelle che
+    cominciano con # non contano; gli spazi intorno a una frase si tolgono. Un #
+    dentro la frase resta, e una riga finisce solo con un a capo."""
+    frasi = tmp_path / "frasi.txt"
+    frasi.write_text(
+        "# commento\n\nNessuna: uno\n  Nessuna: due  \r\n \t \n  # altro\nNessuna: tiro #1\nNessuna: a\u2028b",
+        encoding="utf-8",
+    )
+    imp = config.da_ambiente(ambiente(tmp_path, PV_FRASI=str(frasi)))
+    assert imp.frasi == ("Nessuna: uno", "Nessuna: due", "Nessuna: tiro #1", "Nessuna: a\u2028b")
+
+
+def test_le_frasi_con_il_bom_di_utf8(tmp_path):
+    frasi = tmp_path / "frasi.txt"
+    frasi.write_text("Nessuna: uno\n", encoding="utf-8-sig")
+    assert config.leggi_frasi(frasi) == ("Nessuna: uno",)
+
+
+def test_le_frasi_d_esempio_sono_quelle_predefinite():
+    assert config.leggi_frasi(RADICE / "config.esempio" / "frasi.txt") == testi.FRASI_NESSUNA
+
+
+@pytest.mark.parametrize(
+    ("testo", "messaggio"),
+    [
+        ("# solo commenti\n\n", r"frasi\.txt: nessuna frase"),
+        ("Nessuna: uno\n" + "x" * 101 + "\n", r"frasi\.txt, riga 2: la frase è lunga 101 caratteri, il massimo è 100"),
+        # 100 caratteri per Python, 101 per Telegram, che conta in UTF-16
+        ("x" * 99 + "🎲\n", r"riga 1: la frase è lunga 101 caratteri"),
+        ("Nessuna: uno\n# c\nNessuna: uno\n", r"frasi\.txt, riga 3: la stessa frase è già alla riga 1"),
+        # la riga è quella che mostra l'editor: contano solo gli a capo
+        ("Nessuna: a\x85b\n" + "x" * 101 + "\n", r"frasi\.txt, riga 2: la frase è lunga 101"),
+    ],
+)
+def test_frasi_sbagliate(tmp_path, testo, messaggio):
+    frasi = tmp_path / "frasi.txt"
+    frasi.write_text(testo, encoding="utf-8")
+    with pytest.raises(ConfigurazioneErrata, match=messaggio):
+        config.da_ambiente(ambiente(tmp_path, PV_FRASI=str(frasi)))
+
+
+def test_le_frasi_al_limite_vanno_bene(tmp_path):
+    frasi = tmp_path / "frasi.txt"
+    frasi.write_text("x" * 98 + "🎲\n", encoding="utf-8")
+    assert config.leggi_frasi(frasi) == ("x" * 98 + "🎲",)
+
+
+def test_frasi_che_non_si_leggono(tmp_path):
+    with pytest.raises(ConfigurazioneErrata, match=r"le frasi .*manca\.txt non si leggono"):
+        config.da_ambiente(ambiente(tmp_path, PV_FRASI=str(tmp_path / "manca.txt")))
+    latin1 = tmp_path / "latin1.txt"
+    latin1.write_bytes("Nessuna: è\n".encode("latin-1"))
+    with pytest.raises(ConfigurazioneErrata, match=r"le frasi .*latin1\.txt non sono UTF-8"):
+        config.leggi_frasi(latin1)
+
+
+@pytest.mark.parametrize("riga", ["PV_BOT_TOKEN=123:SEGRETO", 'soprannome = "SEGRETO"'])
+def test_un_file_di_configurazione_al_posto_delle_frasi(tmp_path, riga):
+    """`PV_FRASI` che indica per sbaglio `prossima.env` o il roster: il token
+    non deve finire in un sondaggio nel gruppo, e nemmeno nel messaggio."""
+    sbagliato = tmp_path / "prossima.env"
+    sbagliato.write_text(f"# commento\n{riga}\n", encoding="utf-8")
+    with pytest.raises(
+        ConfigurazioneErrata, match=r"prossima\.env, riga 2: sembra una riga di configurazione"
+    ) as errore:
+        config.da_ambiente(ambiente(tmp_path, PV_FRASI=str(sbagliato)))
+    assert "SEGRETO" not in str(errore.value)
+
+
+def test_l_env_d_esempio_non_passa_per_un_file_di_frasi():
+    with pytest.raises(ConfigurazioneErrata, match="sembra una riga di configurazione"):
+        config.leggi_frasi(RADICE / "config.esempio" / "prossima.env")
+    with pytest.raises(ConfigurazioneErrata, match="sembra una riga di configurazione"):
+        config.leggi_frasi(RADICE / "config.esempio" / "roster.toml")
