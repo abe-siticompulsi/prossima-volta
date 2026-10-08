@@ -157,7 +157,7 @@ def test_una_configurazione_sbagliata_ferma_l_avvio(tmp_path, caplog):
 def test_un_argomento_sconosciuto(caplog):
     with caplog.at_level(logging.ERROR):
         assert principale.main(["boh"], {}) == 2
-    assert "uso: prossima [salute]" in caplog.text
+    assert "uso: prossima [salute | sblocca]" in caplog.text
 
 
 def test_il_battito_si_tocca_a_ogni_giro_anche_dopo_un_errore(store, tmp_path):
@@ -225,6 +225,47 @@ def test_con_errori_di_fila_la_pausa_cresce_fino_a_60_secondi_e_alla_lettura_riu
         telegram, BotFinto(store), store, tmp_path / "battito", fermo, attesa=0, pausa_errore=5
     )
     assert fermo.attese == [5, 10, 20, 40, 60, 60, 5]
+
+
+def errori(caplog):
+    return [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
+
+
+def test_quando_la_pausa_arriva_al_massimo_un_errore_nel_log_fino_alla_lettura_riuscita(
+    store, tmp_path, caplog
+):
+    fermo = FermoFinto()
+    errore = TelegramError("getUpdates: errore di rete (ConnectError)")
+    telegram = TelegramACicli(fermo, [errore] * 8 + [[{"update_id": 1}]] + [errore] * 5)
+    with caplog.at_level(logging.WARNING):
+        principale.ciclo(
+            telegram, BotFinto(store), store, tmp_path / "battito", fermo, attesa=0, pausa_errore=5
+        )
+    # alla quinta la pausa arriva a 60 secondi: un errore, non uno a ogni
+    # tentativo; dopo la lettura riuscita, di nuovo alla quinta
+    assert fermo.attese == [5, 10, 20, 40, 60, 60, 60, 60, 5, 10, 20, 40, 60]
+    da_cinque = (
+        "lettura del bot non riuscita da 5 tentativi di fila, "
+        "l'ultimo: getUpdates: errore di rete (ConnectError)"
+    )
+    assert errori(caplog) == [da_cinque, da_cinque]
+
+
+def test_gli_errori_del_bot_non_dicono_che_la_lettura_non_riesce(store, tmp_path, caplog):
+    class BotRotto(BotFinto):
+        def ricevi(self, aggiornamenti):
+            super().ricevi(aggiornamenti)
+            if aggiornamenti:
+                raise RuntimeError("boom")
+
+    fermo = FermoFinto()
+    telegram = TelegramACicli(fermo, [[{"update_id": 1}]] * 6)
+    with caplog.at_level(logging.WARNING):
+        principale.ciclo(
+            telegram, BotRotto(store), store, tmp_path / "battito", fermo, attesa=0, pausa_errore=5
+        )
+    # Telegram ha risposto ogni volta: gli errori sono del bot, con il traceback
+    assert errori(caplog) == ["ciclo del bot: errore inatteso, riprovo"] * 6
 
 
 def test_un_errore_del_bot_dopo_una_lettura_riuscita_conta_fra_quelli_di_fila(store, tmp_path):

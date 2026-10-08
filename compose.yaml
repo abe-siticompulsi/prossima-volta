@@ -13,6 +13,12 @@ services:
     volumes:
       - ./dati:/data
       - ./config:/config:ro
+    # Il log di Docker non cresce senza fine: tre file da 10 MB al massimo.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # Nessuna porta: il bot chiama Telegram, nessuno chiama il bot.
 
   prova:

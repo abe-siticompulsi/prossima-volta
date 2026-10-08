@@ -6,3 +6,6 @@ __pycache__/
 /config/
 *.pem
 /.superpowers/
+*.sqlite*
+battito
+/.env

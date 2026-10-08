@@ -454,7 +454,13 @@ def dopo(fatti: Fatti, evento: Evento) -> Fatti:
 
 def annunci_da_fare(stato: Stato, fatti: Fatti) -> list[Annuncio]:
     """Gli annunci che lo stato chiede e che non sono ancora stati fatti, data
-    per data e con «impossibile» in fondo. Pura: rifarla non ripete niente."""
+    per data e con «impossibile» in fondo. Pura: rifarla non ripete niente.
+
+    Lo stato ha solo le date ancora in gioco, da oggi in poi (v.
+    `Bot._stato`): una data annunciata come possibile che non è fra le sue è
+    passata. Se nessuno l'ha ritirata con un «non più possibile», «impossibile»
+    non si annuncia: probabilmente quel giorno si è giocato, e «nessuna di
+    queste date» sarebbe falso."""
     annunci: list[Annuncio] = []
     for giorno in stato.date:
         c = conta(stato, giorno)
@@ -464,10 +470,15 @@ def annunci_da_fare(stato: Stato, fatti: Fatti) -> list[Annuncio]:
             annunci.append(Possibile(giorno, c.presenti))
         if c.quasi and giorno not in fatti.quasi:
             annunci.append(Quasi(giorno, c.presenti, stato.senza_voto))
-    if impossibile(stato) and not fatti.impossibile:
+    if impossibile(stato) and not fatti.impossibile and not _possibile_passata(stato, fatti):
         conteggi = [conta(stato, g) for g in stato.date]
         annunci.append(Impossibile(tuple((c.giorno, c.presenti) for c in conteggi if c.con_tre)))
     return annunci
+
+
+def _possibile_passata(stato: Stato, fatti: Fatti) -> bool:
+    """Una data annunciata come possibile, mai ritirata, e passata."""
+    return any(g not in stato.date for g in fatti.possibili)
 
 
 def _andati_via(

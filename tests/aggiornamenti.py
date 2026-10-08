@@ -54,3 +54,11 @@ def vota(bot, telegram, chi: Persona | int, scritto: str = "") -> None:
             opzioni.append(sondaggio["opzioni"].index(regole.etichetta(d(parola))))
     utente = chi if isinstance(chi, int) else chi.telegram_id
     bot.ricevi([risposta(sondaggio["poll_id"], utente, *opzioni)])
+
+
+def fino_al(bot, orologio, giorno: int) -> None:
+    """Il tempo passa fino al `giorno` di ottobre, con il bot che legge (senza
+    buio, quindi senza ripresa)."""
+    while orologio.adesso.day < giorno:
+        orologio.avanza(hours=12)
+        bot.ricevi([])

@@ -140,6 +140,36 @@ def test_ferma_sondaggio_rifiutato_per_un_altro_motivo_non_e_sparito_ne_chiuso()
     assert not isinstance(errore.value, MessaggioSparito | SondaggioGiaChiuso)
 
 
+def test_le_chiamate_che_scrivono_aspettano_la_risposta_fino_a_30_secondi():
+    # una risposta che arriva oltre il timeout è persa, e la scrittura forse è
+    # avvenuta: meglio aspettare di più che ritentare
+    viste = []
+    risultati = {
+        "sendPoll": {"message_id": 501, "poll": {"id": "5432", "options": []}},
+        "sendMessage": {"message_id": 42},
+        "stopPoll": {"id": "5432", "options": []},
+        "getMe": {"username": "ProssimaVoltaBot"},
+    }
+
+    def gestore(richiesta):
+        viste.append(richiesta)
+        return ok(risultati[richiesta.url.path.rsplit("/", 1)[1]])
+
+    http = httpx.Client(transport=httpx.MockTransport(gestore), timeout=httpx.Timeout(10.0))
+    bot = BotTelegram(TOKEN, http=http)
+    bot.manda_sondaggio(-100, "Prossima volta?", ["mar 14/10", "Nessuna: x"])
+    bot.scrivi(-100, "x")
+    bot.ferma_sondaggio(-100, 501)
+    bot.io()
+    scrittura = {"connect": 10.0, "read": 30.0, "write": 10.0, "pool": 10.0}
+    assert {r.url.path.rsplit("/", 1)[1]: r.extensions["timeout"] for r in viste} == {
+        "sendPoll": scrittura,
+        "sendMessage": scrittura,
+        "stopPoll": scrittura,
+        "getMe": {"connect": 10.0, "read": 10.0, "write": 10.0, "pool": 10.0},
+    }
+
+
 def test_registra_comandi():
     viste, gestore = registra(True)
     bot_con(gestore).registra_comandi(

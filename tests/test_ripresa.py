@@ -7,7 +7,7 @@ import pytest
 from prossima import testi
 from prossima.regole import Voto
 from prossima.store import FERMARE, RIAPRIRE, RipresaInCorso
-from prossima.telegram import TelegramTroppeRichieste
+from prossima.telegram import TelegramRifiuto, TelegramTroppeRichieste
 from tests.aggiornamenti import comando, risposta, vota
 from tests.conftest import Ucciso
 from tests.finti import telegram_guasto
@@ -159,6 +159,23 @@ def test_rimanda_dopo_una_riapertura_usa_i_giorni_del_sondaggio_iniziale(
     assert store.sondaggio_aperto().date == (d("21/10"), d("22/10"))
 
 
+@pytest.mark.parametrize("parola", ["8/10", "mer"])
+def test_chiudi_su_una_data_tolta_dalla_riapertura_dice_che_e_passata(
+    bot, telegram, store, orologio, parola
+):
+    bot.ricevi([comando("/sondaggio 8/10 14/10")])  # mercoledì e martedì
+    dopo_il_buio(bot, orologio)  # riaperto con il solo martedì 14/10
+    riaperto = store.sondaggio_aperto()
+    chiudi = comando(f"/chiudi {parola}")
+    bot.ricevi([chiudi])
+    # era nel sondaggio: «non era nel sondaggio» o «nessun mercoledì» sarebbe falso
+    assert [(a["testo"], a["risposta_a"]) for a in telegram.di_tipo("scrivi")][-1] == (
+        "La data 8/10 è già passata.",
+        chiudi["message"]["message_id"],
+    )
+    assert store.sondaggio_aperto() == riaperto
+
+
 def test_tutte_le_date_passate_chiude_e_basta(bot, telegram, store, orologio):
     bot.ricevi([comando("/sondaggio 8/10 9/10")])
     dopo_il_buio(bot, orologio, ore=80)
@@ -218,6 +235,7 @@ def test_con_una_chiusura_in_sospeso_la_ripresa_completa_il_chiudi(
     bot, telegram, store, orologio, guasto, chiudi, scritto
 ):
     vecchio = sondaggio_con_tre_voti(bot, telegram, store)
+    telegram.conteggi[vecchio.messaggio] = [2, 1, 1]
     if guasto == "rete":
         telegram.guasti["ferma_sondaggio"] = telegram_guasto("ferma_sondaggio")
     else:
@@ -285,7 +303,7 @@ def test_lo_stop_che_non_riesce_si_ritenta_alla_lettura_seguente(
     assert store.ripresa() is None
 
 
-def test_il_sondaggio_che_non_parte_nella_ripresa_riparte_alla_lettura_seguente(
+def test_il_sondaggio_che_forse_non_parte_nella_ripresa_riparte_dieci_minuti_dopo(
     bot, telegram, store, orologio, caplog
 ):
     vecchio = sondaggio_con_tre_voti(bot, telegram, store)
@@ -303,12 +321,71 @@ def test_il_sondaggio_che_non_parte_nella_ripresa_riparte_alla_lettura_seguente(
     del telegram.guasti["manda_sondaggio"]
     orologio.avanza(seconds=25)
     bot.ricevi([])
+    # un errore di rete: forse il sondaggio è partito, il prossimo aspetta
+    assert len(telegram.di_tipo("manda_sondaggio")) == 1
+    orologio.avanza(seconds=575)  # 10 minuti dopo il tentativo
+    bot.ricevi([])
     assert telegram.scritti() == [BUIO, UGUALI, RIAPRO]
     riaperto = store.sondaggio_aperto()
     assert riaperto.id == vecchio.id
     assert riaperto.poll_id == telegram.ultimo_sondaggio["poll_id"]
     assert store.voti(riaperto.id)[EMI.telegram_id] == Voto(frozenset({d("14/10"), d("16/10")}))
     assert store.ripresa() is None
+
+
+def test_riapro_risponde_al_sondaggio_riaperto(bot, telegram, store, orologio):
+    vecchio = sondaggio_con_tre_voti(bot, telegram, store)
+    telegram.conteggi[vecchio.messaggio] = [2, 1, 1]
+    dopo_il_buio(bot, orologio)
+    riapro = telegram.di_tipo("scrivi")[-1]
+    # così si sa quale sondaggio conta
+    assert (riapro["testo"], riapro["risposta_a"]) == (RIAPRO, telegram.ultimo_sondaggio["messaggio"])
+
+
+def test_con_la_risposta_del_sondaggio_riaperto_sempre_persa_uno_ogni_dieci_minuti(
+    bot, telegram, store, orologio
+):
+    vecchio = sondaggio_con_tre_voti(bot, telegram, store)
+    telegram.conteggi[vecchio.messaggio] = [2, 1, 1]
+    telegram.risposte_perse.add("manda_sondaggio")  # Telegram risponde oltre il timeout
+    dopo_il_buio(bot, orologio)
+    for _ in range(144):  # un'ora di letture, una ogni 25 secondi
+        orologio.avanza(seconds=25)
+        bot.ricevi([])
+    # oltre a quello di prima del buio, uno subito e poi uno ogni 10 minuti:
+    # non uno per lettura
+    assert len(telegram.di_tipo("manda_sondaggio")) == 1 + 7
+    assert telegram.scritti() == [BUIO, UGUALI]
+    assert store.ripresa() == RipresaInCorso(vecchio.id, RIAPRIRE)
+    telegram.risposte_perse.clear()
+    orologio.avanza(seconds=25)
+    bot.ricevi([])  # 25 secondi dopo l'ultimo tentativo: si aspetta ancora
+    assert len(telegram.di_tipo("manda_sondaggio")) == 1 + 7
+    orologio.avanza(minutes=10)
+    bot.ricevi([])
+    assert telegram.scritti() == [BUIO, UGUALI, RIAPRO]
+    assert store.sondaggio_aperto().poll_id == telegram.ultimo_sondaggio["poll_id"]
+
+
+@pytest.mark.parametrize(
+    "errore",
+    [
+        TelegramRifiuto("sendPoll: Bad Request: poll options must be non-empty"),
+        TelegramTroppeRichieste("sendPoll: Too Many Requests", 20),
+    ],
+)
+def test_un_sondaggio_riaperto_che_di_sicuro_non_e_partito_si_ritenta_alla_lettura_seguente(
+    bot, telegram, store, orologio, errore
+):
+    vecchio = sondaggio_con_tre_voti(bot, telegram, store)
+    telegram.conteggi[vecchio.messaggio] = [2, 1, 1]
+    telegram.guasti["manda_sondaggio"] = errore
+    dopo_il_buio(bot, orologio)
+    assert len(telegram.di_tipo("manda_sondaggio")) == 1
+    del telegram.guasti["manda_sondaggio"]
+    orologio.avanza(seconds=25)
+    bot.ricevi([])
+    assert telegram.scritti() == [BUIO, UGUALI, RIAPRO]
 
 
 def test_un_sondaggio_lanciato_mentre_la_riapertura_aspetta_vale_quello(
@@ -414,7 +491,7 @@ def test_i_voti_al_sondaggio_fermato_mentre_la_riapertura_aspetta_si_tengono(
     # un voto dato poco prima dello stop, arrivato mentre la riapertura aspetta
     bot.ricevi([risposta(vecchio.poll_id, GIO.telegram_id, 0)])
     del telegram.guasti["manda_sondaggio"]
-    orologio.avanza(seconds=25)
+    orologio.avanza(minutes=10)  # dopo un errore di rete la riapertura aspetta 10 minuti
     bot.ricevi([])
     assert telegram.scritti()[-1] == (
         "Riapro il sondaggio. Ho già i voti di gio, abe, emi e sem: se non avete cambiato idea, "
@@ -628,6 +705,60 @@ def test_la_ripresa_uccisa_a_meta_si_completa_al_giro_seguente(
     assert telegram.scritti() == [BUIO, conteggi, RIAPRO]
     assert store.sondaggio_aperto().id == vecchio.id
     assert store.ripresa() is None
+
+
+def test_dopo_il_buio_con_un_lotto_pieno_la_ripresa_aspetta_il_lotto_seguente(
+    bot, telegram, store, orologio
+):
+    vecchio = sondaggio_con_tre_voti(bot, telegram, store)
+    lettura = store.ultima_lettura()
+    telegram.conteggi[vecchio.messaggio] = [3, 1, 1]  # con il voto di gio, che arriva dopo
+    orologio.avanza(hours=30)
+    # 100 aggiornamenti, il massimo di una lettura: dopo ce ne sono forse altri
+    bot.ricevi([comando("ciao") for _ in range(100)])
+    assert telegram.di_tipo("ferma_sondaggio") == []
+    assert telegram.scritti() == []
+    assert store.ultima_lettura() == lettura  # il buio resta
+    assert store.ripresa() is None
+    orologio.avanza(minutes=2)
+    bot.ricevi([risposta(vecchio.poll_id, GIO.telegram_id, 0)])
+    # il voto di gio, arrivato nel lotto seguente, conta nel confronto; il buio
+    # è finito con la prima lettura, alle 2:00
+    assert telegram.scritti() == [
+        BUIO,
+        UGUALI,
+        "Riapro il sondaggio. Ho già i voti di gio, abe, emi e sem: se non avete cambiato idea, "
+        "non serve rivotare. Non hanno ancora votato: sese, pippo.",
+    ]
+    assert store.ripresa() is None
+
+
+def test_un_sondaggio_nato_in_un_lotto_pieno_dopo_il_buio_non_si_ferma(bot, telegram, store, orologio):
+    bot.ricevi([])
+    orologio.avanza(hours=30)
+    bot.ricevi([comando("/sondaggio mar gio"), *(comando("ciao") for _ in range(99))])
+    orologio.avanza(seconds=25)
+    bot.ricevi([])
+    assert telegram.di_tipo("ferma_sondaggio") == []
+    assert telegram.scritti() == [BUIO]
+    assert store.ripresa() is None
+
+
+def test_un_chiudi_nel_lotto_del_buio_dice_se_i_conteggi_sono_diversi(
+    bot, telegram, store, orologio
+):
+    vecchio = sondaggio_con_tre_voti(bot, telegram, store)
+    telegram.conteggi[vecchio.messaggio] = [3, 1, 1]  # un voto perso nel buio
+    orologio.avanza(hours=30)
+    bot.ricevi([comando("/chiudi")])
+    # il /chiudi si gestisce prima della ripresa, e chiude con i voti che il
+    # bot ha visto: i conteggi di Telegram dicono che non sono tutti
+    assert telegram.scritti() == [
+        DIVERSI,
+        "🔒 Sondaggio chiuso. Nessuna data con il master e quattro giocatori.",
+        BUIO,
+    ]
+    assert store.sondaggio_aperto() is None
 
 
 def test_la_ripresa_arriva_dopo_gli_aggiornamenti_del_lotto(bot, telegram, store, orologio):

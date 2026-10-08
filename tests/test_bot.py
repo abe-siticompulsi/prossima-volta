@@ -7,7 +7,7 @@ from prossima import testi
 from prossima.regole import Voto
 from prossima.store import NonConfermato
 from prossima.telegram import TelegramRifiuto, TelegramTroppeRichieste
-from tests.aggiornamenti import GRUPPO, comando, risposta, vota
+from tests.aggiornamenti import GRUPPO, comando, fino_al, risposta, vota
 from tests.finti import telegram_guasto
 from tests.tavolo import ABE, EMI, ESTRANEO, GIO, PIPPO, SEM, SESE, d
 
@@ -401,6 +401,72 @@ def test_chi_non_e_nel_roster_non_conta_negli_annunci(bot, telegram):
         vota(bot, telegram, persona, "14/10")
     vota(bot, telegram, ESTRANEO, "14/10")
     assert telegram.scritti() == []
+
+
+def test_una_data_passata_non_si_annuncia(bot, telegram, orologio):
+    bot.ricevi([comando("/sondaggio mar gio")])
+    fino_al(bot, orologio, 15)  # mercoledì 15/10: il 14 è passato
+    for persona in (GIO, ABE, EMI, SEM, SESE):
+        vota(bot, telegram, persona, "14/10 16/10")
+    # quasi e possibile il 14 come il 16, ma del 14 non si dice niente
+    assert telegram.scritti() == [
+        "📅 gio 16/10: ci sono gio, abe, emi e sem, manca un giocatore. "
+        "Non hanno ancora votato: sese, pippo.",
+        "✅ gio 16/10 va bene: ci sono gio, abe, emi, sem e sese.",
+    ]
+
+
+def test_impossibile_conta_solo_le_date_da_oggi_in_poi(bot, telegram, orologio):
+    bot.ricevi([comando("/sondaggio mar gio")])
+    fino_al(bot, orologio, 15)
+    for persona in (GIO, ABE, EMI, SEM):
+        vota(bot, telegram, persona, "14/10")
+    vota(bot, telegram, SESE, "nessuna")
+    vota(bot, telegram, PIPPO, "nessuna")
+    # il master non c'è il 16, l'unica data da oggi in poi: con tre non c'è
+    # nessuna data da tenere, e il 14 (con tre, ma passato) non si propone
+    assert telegram.scritti() == [
+        "😬 Con quattro giocatori non ci si sta in nessuna di queste date, e nemmeno con tre. "
+        "gio, abe: /chiudi@ProssimaVoltaBot rimanda per rifare il sondaggio sulla settimana dopo."
+    ]
+
+
+def test_un_possibile_su_una_data_che_passa_non_diventa_non_piu_possibile(bot, telegram, orologio):
+    bot.ricevi([comando("/sondaggio mar gio")])
+    for persona in (GIO, ABE, EMI, SEM, SESE):
+        vota(bot, telegram, persona, "14/10 16/10")
+    assert "✅ mar 14/10 va bene: ci sono gio, abe, emi, sem e sese." in telegram.scritti()
+    fino_al(bot, orologio, 15)
+    prima = len(telegram.scritti())
+    vota(bot, telegram, SEM, "")
+    # il 14 è passato, non «non più possibile»: cambia solo il 16
+    assert telegram.scritti()[prima:] == ["⚠️ gio 16/10 non va più bene: sem ha tolto il voto."]
+
+
+def test_dopo_un_possibile_su_una_data_passata_niente_impossibile(bot, telegram, orologio):
+    bot.ricevi([comando("/sondaggio mar gio")])
+    for persona in (GIO, ABE, EMI, SEM, SESE):
+        vota(bot, telegram, persona, "14/10")  # il 16 è fuori: il master non c'è
+    assert telegram.scritti()[-1] == "✅ mar 14/10 va bene: ci sono gio, abe, emi, sem e sese."
+    fino_al(bot, orologio, 15)
+    # da oggi in poi resta il 16, fuori; ma il 14 andava bene e nessuno ha tolto
+    # il voto: probabilmente si è giocato, e «nessuna di queste date» sarebbe falso
+    assert not any(t.startswith("😬") for t in telegram.scritti())
+
+
+def test_senza_un_possibile_su_una_data_passata_l_impossibile_lo_dice_il_tempo(
+    bot, telegram, orologio
+):
+    bot.ricevi([comando("/sondaggio mar gio")])
+    for persona in (GIO, ABE, EMI):
+        vota(bot, telegram, persona, "14/10")  # il 14 in gioco, non possibile; il 16 fuori
+    assert telegram.scritti() == []
+    fino_al(bot, orologio, 15)
+    # da oggi in poi resta il 16, fuori: lo dice il passare del tempo, non un voto
+    assert telegram.scritti() == [
+        "😬 Con quattro giocatori non ci si sta in nessuna di queste date, e nemmeno con tre. "
+        "gio, abe: /chiudi@ProssimaVoltaBot rimanda per rifare il sondaggio sulla settimana dopo."
+    ]
 
 
 # --- gli invii che non riescono

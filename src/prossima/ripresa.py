@@ -7,7 +7,10 @@ transazione (la chiave `ripresa` dello store, con le fasi «fermare» e
 «riaprire»): a ogni lettura la ripresa continua dal passo in cui si era
 fermata. Un errore di Telegram la lascia dov'è, e la lettura seguente riprova;
 un altro errore la ferma fino al prossimo avvio (le riprese guaste, in
-memoria).
+memoria). Dopo un sondaggio riaperto che forse è partito senza che la
+risposta arrivasse, il prossimo non parte prima di 10 minuti (in memoria anche
+questo): con Telegram che risponde oltre il timeout, ogni lettura ne
+manderebbe uno.
 
 Dipende dall'invio (lo stop, il sondaggio nuovo, le lettere, la pausa), dallo
 store, dalle regole e dai testi. Una chiusura in sospeso vince sulla ripresa:
@@ -22,7 +25,7 @@ from collections.abc import Callable
 from datetime import date, datetime, tzinfo
 
 from . import regole, testi
-from .invio import Avvisi, Invio, livello
+from .invio import AVVISO_RIPETUTO, Avvisi, Invio, forse_arrivata, livello
 from .regole import Roster
 from .store import FERMARE, RIAPRIRE, RipresaInCorso, Sondaggio, Store
 from .telegram import TelegramError
@@ -52,6 +55,10 @@ class Ripresa:
         self._guaste: set[int] = set()
         # Gli avvisi nel log degli errori di Telegram, per sondaggio.
         self._avvisi = Avvisi(adesso)
+        # Le riaperture il cui sondaggio nuovo forse è partito (la rete, un
+        # 5xx, una risposta illeggibile), per sondaggio: il momento del
+        # tentativo. Il prossimo non parte prima di `AVVISO_RIPETUTO`.
+        self._forse_partite: dict[int, datetime] = {}
 
     # --- lo stato, per le altre parti
 
@@ -92,9 +99,10 @@ class Ripresa:
     # --- i passi
 
     def inizia(self, dal: datetime, al: datetime) -> None:
-        """Il buio dal `dal` al `al`: lo dice e, se c'è un sondaggio aperto da
-        prima del lotto, ne comincia la ripresa. Un sondaggio nato nel lotto
-        (dopo la lettura del buio) non ha voti persi: non si ferma e rifà.
+        """Il buio dal `dal` al `al` (la prima lettura dopo il buio): lo dice
+        e, se c'è un sondaggio aperto da prima, ne comincia la ripresa. Un
+        sondaggio nato dopo, in un lotto letto da `al` in poi, non ha voti
+        persi: non si ferma e rifà.
 
         La lettura si segna qui, nella stessa transazione del messaggio del
         buio e della ripresa: se la ripresa si ferma a metà, la lettura seguente
@@ -174,9 +182,13 @@ class Ripresa:
 
     def _riapri(self, ripresa: RipresaInCorso) -> None:
         """La fase «riaprire»: il sondaggio nuovo sulle date non ancora passate,
-        con i voti tenuti. Un sondaggio lanciato nel frattempo vale al posto
+        con i voti tenuti, e «Riapro il sondaggio…» in risposta a quello, così
+        si sa quale conta. Un sondaggio lanciato nel frattempo vale al posto
         suo. Se il sondaggio nuovo non parte, nessun messaggio: «riprovate con
-        /sondaggio» butterebbe i voti tenuti, e la lettura seguente riprova."""
+        /sondaggio» butterebbe i voti tenuti. Se di sicuro non è partito (la
+        pausa di un 429, un rifiuto) la lettura seguente riprova; se forse è
+        partito, il prossimo tentativo aspetta 10 minuti: nel gruppo può
+        restare un sondaggio in più, uno ogni 10 minuti al massimo."""
         if self._store.sondaggio_aperto() is not None:
             # aprirlo toglie già la ripresa (`store._apri`): questa è la rete
             self._store.fine_ripresa(self._adesso())
@@ -187,9 +199,14 @@ class Ripresa:
         if not future:
             self._store.fine_ripresa(self._adesso(), self._invio.lettere([testi.date_passate()]))
             return
-        if self._invio.in_pausa():
+        if self._invio.in_pausa() or self._da_aspettare(sondaggio.id):
             return
-        mandato, frase = self._invio.nuovo_sondaggio(future)
+        try:
+            mandato, frase = self._invio.nuovo_sondaggio(future)
+        except TelegramError as e:
+            if forse_arrivata(e):
+                self._forse_partite[sondaggio.id] = self._adesso()
+            raise
         stato = regole.Stato(self._roster, tuple(future), self._store.voti(sondaggio.id))
         self._store.riapri_sondaggio(
             sondaggio.id,
@@ -199,8 +216,13 @@ class Ripresa:
             frase,
             regole.dopo(self._store.fatti(sondaggio.id), regole.Ripresa()),
             self._adesso(),
-            self._invio.lettere([testi.riapro(stato.votanti, stato.senza_voto)]),
+            [
+                self._invio.lettera(
+                    testi.riapro(stato.votanti, stato.senza_voto), risposta_a=mandato.messaggio
+                )
+            ],
         )
+        self._forse_partite.pop(sondaggio.id, None)
 
     # --- i pezzi
 
@@ -209,6 +231,11 @@ class Ripresa:
         stop: la chiusura in sospeso, letta dallo store (v. `chiusura.py`)."""
         sospesa = self._store.chiusura_sospesa()
         return sospesa is not None and sospesa.sondaggio == sondaggio.id
+
+    def _da_aspettare(self, sondaggio_id: int) -> bool:
+        """Il sondaggio riaperto forse è partito meno di 10 minuti fa."""
+        tentato = self._forse_partite.get(sondaggio_id)
+        return tentato is not None and self._adesso() - tentato < AVVISO_RIPETUTO
 
     def _oggi(self) -> date:
         return self._adesso().astimezone(self._fuso).date()

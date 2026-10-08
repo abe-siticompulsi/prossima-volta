@@ -20,10 +20,10 @@ Che cosa parte verso Telegram, e quando:
   sospeso, il bot lo dice, e la ritenta a ogni giro (`manda`) finché Telegram
   risponde (v. `chiusura.py`);
 - gli annunci (quasi, possibile, non più possibile, impossibile) si calcolano
-  dallo stato a ogni giro (`manda`), e contano come fatti solo dopo che
-  Telegram li ha accettati; con la chiusura in sospeso non ce ne sono. Uno
-  rifiutato (4xx) va nel log come errore, non ferma gli altri, e non si
-  riprova fino al prossimo avvio;
+  dallo stato a ogni giro (`manda`), solo sulle date da oggi in poi, e
+  contano come fatti solo dopo che Telegram li ha accettati; con la chiusura
+  in sospeso non ce ne sono. Uno rifiutato (4xx) va nel log come errore, non
+  ferma gli altri, e non si riprova fino al prossimo avvio;
 - ogni altro messaggio passa dalla posta in uscita del database, in ordine
   (v. `invio.py`).
 Dopo un 429 niente parte prima di `retry_after`; nel frattempo `manda` non
@@ -43,7 +43,7 @@ from .invio import Invio, forse_arrivata, livello
 from .regole import Roster
 from .ripresa import Ripresa
 from .store import Sondaggio, Store
-from .telegram import TelegramError, TelegramRifiuto
+from .telegram import MASSIMO_AGGIORNAMENTI, TelegramError, TelegramRifiuto
 
 log = logging.getLogger(__name__)
 
@@ -88,6 +88,9 @@ class Bot:
         # Gli annunci che Telegram ha rifiutato (4xx) in questo processo, già
         # scritti nel log: si saltano fino al prossimo avvio.
         self._annunci_rifiutati: set[tuple[int, regole.Annuncio]] = set()
+        # La prima lettura dopo il buio, se il suo lotto era pieno: la ripresa
+        # aspetta di aver gestito gli arretrati, ma il buio è finito lì.
+        self._fine_del_buio: datetime | None = None
 
     # --- il giro
 
@@ -97,7 +100,12 @@ class Bot:
         lettura, e da lì si conta il buio. Ogni aggiornamento, poi il suo offset
         (dopo, non prima: un aggiornamento gestito due volte è innocuo), poi gli
         invii. Dopo più di 23 ore senza letture comincia la ripresa (§3.8), e a
-        ogni lettura una ripresa in corso fa i passi che può."""
+        ogni lettura una ripresa in corso fa i passi che può.
+
+        Un lotto pieno dopo il buio lascia forse degli arretrati: la ripresa
+        aspetta il primo lotto che non è pieno, così i voti arrivati nel buio
+        contano nel confronto, e fino a lì la lettura non si segna (il buio
+        resta). Il buio è finito con la prima lettura."""
         ora = self._adesso()
         precedente = self._store.ultima_lettura()
         for aggiornamento in aggiornamenti:
@@ -107,14 +115,19 @@ class Bot:
                 log.exception("aggiornamento %s non gestito", aggiornamento.get("update_id"))
             self._store.salva_offset(int(aggiornamento["update_id"]) + 1)
             self.manda()
-        if regole.al_buio(precedente, ora):
+        if not regole.al_buio(precedente, ora):
+            self._store.segna_lettura(ora)
+        elif len(aggiornamenti) >= MASSIMO_AGGIORNAMENTI:
+            if self._fine_del_buio is None:
+                self._fine_del_buio = ora
+        else:
+            fine = self._fine_del_buio or ora
             try:
-                self._ripresa.inizia(precedente, ora)
+                self._ripresa.inizia(precedente, fine)
+                self._fine_del_buio = None
             except Exception:
                 # la lettura non è segnata: la prossima vede di nuovo il buio
                 log.exception("ripresa dopo il buio non cominciata")
-        else:
-            self._store.segna_lettura(ora)
         self._ripresa.continua()
         self.manda()
 
@@ -304,4 +317,10 @@ class Bot:
         return self._adesso().astimezone(self._fuso).date()
 
     def _stato(self, sondaggio: Sondaggio) -> regole.Stato:
-        return regole.Stato(self._roster, sondaggio.date, self._store.voti(sondaggio.id))
+        """Lo stato per gli annunci: solo le date da oggi in poi. Una data
+        passata non si annuncia più: né quasi, né possibile, né «non più
+        possibile» (un «possibile» su una data che passa resta com'è), né fra
+        le date di «impossibile»."""
+        oggi = self._oggi()
+        future = tuple(g for g in sondaggio.date if g >= oggi)
+        return regole.Stato(self._roster, future, self._store.voti(sondaggio.id))

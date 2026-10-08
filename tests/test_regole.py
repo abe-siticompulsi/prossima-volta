@@ -230,6 +230,20 @@ def test_impossibile_di_nuovo_solo_dopo_un_rientro():
     assert regole.annunci_da_fare(s, fatti) == [Impossibile(())]
 
 
+def test_impossibile_non_si_annuncia_dopo_un_possibile_su_una_data_passata():
+    # Lo stato ha solo le date ancora in gioco: il 14/10 è passato, e del
+    # sondaggio resta il 16/10, fuori (il master c'era solo il 14)
+    s = stato("16/10", gio="14/10", abe="14/10", emi="14/10", sem="14/10", sese="14/10")
+    assert regole.impossibile(s)
+    presenti = (GIO, ABE, EMI, SEM, SESE)
+    fatti = regole.dopo(Fatti(), Possibile(d("14/10"), presenti))
+    # il 14/10 andava bene e nessuno l'ha ritirato: probabilmente si è giocato
+    assert regole.annunci_da_fare(s, fatti) == []
+    # ritirato con un «non più possibile», l'impossibile si dice
+    fatti = regole.dopo(fatti, NonPiu(d("14/10"), (SESE,)))
+    assert regole.annunci_da_fare(s, fatti) == [Impossibile(())]
+
+
 def test_rientrato_falso_senza_impossibile_annunciato():
     assert not regole.rientrato(stato(), Fatti())
 

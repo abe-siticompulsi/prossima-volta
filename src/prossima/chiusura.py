@@ -118,7 +118,10 @@ class Chiusure:
         elif parole:
             try:
                 oggi = self._oggi()
-                tenuta = regole.data_da_chiudere(parole[0], sondaggio.date, oggi)
+                # anche le date che una ripresa ha tolto perché passate: erano
+                # nel sondaggio, e il rifiuto giusto è «è già passata»
+                tutte = sorted({*sondaggio.date, *sondaggio.date_iniziali})
+                tenuta = regole.data_da_chiudere(parole[0], tutte, oggi)
                 if tenuta < oggi:
                     raise regole.DataPassata(regole.breve(tenuta))
             except regole.Rifiuto as r:
@@ -207,7 +210,9 @@ class Chiusure:
         """Chiude il sondaggio, fermo su Telegram, come chiede il `/chiudi`:
         le date possibili, la data tenuta, o `rimanda`. Le date possibili si
         contano adesso, con i voti arrivati fino allo stop, e solo da oggi in
-        poi."""
+        poi; se i conteggi di Telegram allo stop sono diversi da quelli del
+        bot (voti persi, per esempio nel buio), il riepilogo è preceduto dalla
+        frase che lo dice."""
         if chiusura.argomento == regole.RIMANDA:
             self._rimanda(sondaggio, chiusura.comando, fermato)
             return
@@ -215,6 +220,8 @@ class Chiusure:
         if chiusura.argomento is not None:
             lettere.append(testi.si_gioca(date.fromisoformat(chiusura.argomento)))
         else:
+            if fermato.conteggi is not None and fermato.conteggi != self._conteggi(sondaggio):
+                lettere.append(testi.conteggi(False))
             # il riepilogo dice solo le date in cui si può ancora giocare; se c'erano
             # date possibili ma sono tutte passate, non dice che non ce n'erano
             oggi = self._oggi()
@@ -275,3 +282,10 @@ class Chiusure:
 
     def _stato(self, sondaggio: Sondaggio) -> regole.Stato:
         return regole.Stato(self._roster, sondaggio.date, self._store.voti(sondaggio.id))
+
+    def _conteggi(self, sondaggio: Sondaggio) -> list[int]:
+        """I conteggi del bot nella forma di quelli di `stopPoll`: solo i voti
+        dati nel sondaggio di Telegram di adesso, gli unici che Telegram conta."""
+        return regole.conteggi_per_opzione(
+            sondaggio.date, self._store.voti_del_poll(sondaggio.id, sondaggio.poll_id)
+        )

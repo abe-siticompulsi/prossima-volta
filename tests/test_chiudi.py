@@ -6,7 +6,7 @@ import pytest
 from prossima import testi
 from prossima.store import ChiusuraSospesa, NonConfermato
 from prossima.telegram import TelegramRifiuto, TelegramTroppeRichieste
-from tests.aggiornamenti import GRUPPO, comando, risposta, vota
+from tests.aggiornamenti import GRUPPO, comando, fino_al, risposta, vota
 from tests.conftest import Ucciso
 from tests.finti import telegram_guasto
 from tests.tavolo import ABE, EMI, ESTRANEO, GIO, SEM, SESE, d
@@ -20,14 +20,6 @@ def aperto(bot, telegram, store):
     """Un sondaggio su martedì 14/10 e giovedì 16/10."""
     bot.ricevi([comando("/sondaggio mar gio")])
     return store.sondaggio_aperto()
-
-
-def fino_al(bot, orologio, giorno: int) -> None:
-    """Il tempo passa fino al `giorno` di ottobre, con il bot che legge (senza
-    buio, quindi senza ripresa)."""
-    while orologio.adesso.day < giorno:
-        orologio.avanza(hours=12)
-        bot.ricevi([])
 
 
 def possibile_il_14(bot, telegram):
@@ -96,6 +88,27 @@ def test_chiudi_senza_date_possibili(bot, telegram, aperto):
     assert telegram.scritti() == [
         "🔒 Sondaggio chiuso. Nessuna data con il master e quattro giocatori."
     ]
+
+
+def test_con_i_conteggi_di_telegram_diversi_il_riepilogo_lo_dice_prima(bot, telegram, store, aperto):
+    possibile_il_14(bot, telegram)
+    prima = len(telegram.scritti())
+    telegram.conteggi[aperto.messaggio] = [6, 0, 0]  # un voto che il bot non ha visto
+    bot.ricevi([comando("/chiudi")])
+    # le date possibili sono contate sui voti del bot: chi legge sa che ne manca qualcuno
+    assert telegram.scritti()[prima:] == [
+        "I conteggi del sondaggio sono diversi dai miei: "
+        "qualcuno ha votato o cambiato voto senza che lo sapessi.",
+        "🔒 Sondaggio chiuso. Date possibili: mar 14/10.",
+    ]
+
+
+def test_con_i_conteggi_di_telegram_uguali_il_riepilogo_e_solo(bot, telegram, store, aperto):
+    possibile_il_14(bot, telegram)
+    prima = len(telegram.scritti())
+    telegram.conteggi[aperto.messaggio] = [5, 0, 0]
+    bot.ricevi([comando("/chiudi")])
+    assert telegram.scritti()[prima:] == ["🔒 Sondaggio chiuso. Date possibili: mar 14/10."]
 
 
 @pytest.mark.parametrize("parola", ["14/10", "14.10", "mar", "MAR"])
@@ -571,6 +584,7 @@ def test_lo_stop_ritentato_va_nel_log_la_prima_volta_e_poi_ogni_dieci_minuti(
     ids=["rete", "rifiuto"],
 )
 def test_con_la_chiusura_in_sospeso_niente_annunci(bot, telegram, store, aperto, guasto):
+    telegram.conteggi[aperto.messaggio] = [5, 0, 0]  # i voti qui sotto
     telegram.guasti["ferma_sondaggio"] = guasto
     bot.ricevi([comando("/chiudi")])
     possibile_il_14(bot, telegram)  # il 14/10 diventa possibile: la decisione è già presa
@@ -751,6 +765,7 @@ def test_ucciso_dopo_la_chiusura_la_lettera_non_si_perde(
 def test_dopo_la_chiusura_niente_annunci(bot, telegram, aperto):
     for persona in (GIO, ABE, EMI):
         vota(bot, telegram, persona, "14/10")
+    telegram.conteggi[aperto.messaggio] = [3, 0, 0]
     bot.ricevi([comando("/chiudi")])
     vota(bot, telegram, SEM, "14/10")  # un voto arrivato tardi: il sondaggio è chiuso
     assert telegram.scritti() == [

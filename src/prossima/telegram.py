@@ -31,6 +31,15 @@ import httpx
 _SPARITO = re.compile(r"message[^:]*not found|MESSAGE_ID_INVALID", re.IGNORECASE)
 # e un sondaggio fermato una seconda volta come «poll has already been closed».
 _GIA_CHIUSO = re.compile(r"poll[^:]*already[^:]*closed", re.IGNORECASE)
+# Le chiamate che scrivono (`sendPoll`, `sendMessage`, `stopPoll`) aspettano la
+# risposta fino a 30 secondi: una risposta che arriva dopo il timeout è persa, e
+# la scrittura forse è avvenuta (un sondaggio o un messaggio in più, se il bot
+# la ritenta). Le altre restano con i 10 secondi del client; `getUpdates`
+# aspetta il long polling più 10 secondi.
+SCRITTURA = httpx.Timeout(10.0, read=30.0)
+# Gli aggiornamenti che `getUpdates` dà al massimo in una lettura (il default di
+# `limit`): un lotto pieno dice che dopo ce ne sono forse altri.
+MASSIMO_AGGIORNAMENTI = 100
 
 
 class TelegramError(RuntimeError):
@@ -69,7 +78,9 @@ class BotTelegram:
         self._base = f"https://api.telegram.org/bot{token}/"
         self._http = http or httpx.Client(timeout=httpx.Timeout(10.0))
 
-    def _chiama(self, metodo: str, corpo: dict | None = None, timeout: float | None = None) -> Any:
+    def _chiama(
+        self, metodo: str, corpo: dict | None = None, timeout: float | httpx.Timeout | None = None
+    ) -> Any:
         argomenti: dict[str, Any] = {"json": corpo or {}}
         if timeout is not None:
             argomenti["timeout"] = timeout
@@ -117,6 +128,7 @@ class BotTelegram:
                 "allows_multiple_answers": True,
                 "allows_revoting": True,
             },
+            timeout=SCRITTURA,
         )
         return SondaggioMandato(poll_id=messaggio["poll"]["id"], messaggio=messaggio["message_id"])
 
@@ -137,13 +149,15 @@ class BotTelegram:
                 "message_id": risposta_a,
                 "allow_sending_without_reply": True,
             }
-        return self._chiama("sendMessage", corpo)
+        return self._chiama("sendMessage", corpo, timeout=SCRITTURA)
 
     def ferma_sondaggio(self, chat_id: int, messaggio: int) -> list[int]:
         """Ferma il sondaggio e restituisce i conteggi per opzione, nell'ordine
         delle opzioni."""
         try:
-            sondaggio = self._chiama("stopPoll", {"chat_id": chat_id, "message_id": messaggio})
+            sondaggio = self._chiama(
+                "stopPoll", {"chat_id": chat_id, "message_id": messaggio}, timeout=SCRITTURA
+            )
         except TelegramRifiuto as e:
             if _SPARITO.search(str(e)):
                 raise MessaggioSparito(str(e)) from None

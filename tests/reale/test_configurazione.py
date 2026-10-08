@@ -1,5 +1,5 @@
-"""L'immagine e la configurazione vere. Nel container (`docker compose
---profile prova run --rm prova`) l'ambiente è quello di `config/prossima.env`."""
+"""L'immagine e la configurazione vere. Nel container (`docker compose --profile
+prova run --rm --build prova`) l'ambiente è quello di `config/prossima.env`."""
 
 import os
 from datetime import datetime, timedelta

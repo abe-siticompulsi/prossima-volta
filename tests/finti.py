@@ -46,7 +46,10 @@ class TelegramFinto:
         self.risposte_perse: set[str] = set()
         self.aggiornamenti_da_dare: list[dict] = []
         self.sondaggi: list[dict] = []  # i sondaggi mandati, il più recente in fondo
-        self.conteggi: dict[int, list[int]] = {}  # per messaggio: quello che darà stopPoll
+        # Per messaggio, i conteggi che darà stopPoll; senza, zero per opzione. Il
+        # finto non vede i voti: una prova con dei voti che arriva a uno stop dice
+        # quanti ne conta Telegram, o il bot li troverà diversi dai suoi.
+        self.conteggi: dict[int, list[int]] = {}
         self.cancellati: set[int] = set()  # messaggi cancellati da qualcuno nel gruppo
         self.fermati: set[int] = set()  # i messaggi dei sondaggi fermati
         self._ultimo_id = 500

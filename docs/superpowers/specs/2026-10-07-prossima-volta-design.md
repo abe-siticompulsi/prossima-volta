@@ -4,9 +4,10 @@ Data: 2026-10-07. Stato: approvata da Alberto in conversazione (tre parti più l
 modifiche), da eseguire con subagenti. Aggiornata il 2026-10-08 con il giro di
 correzioni A (gli errori di Telegram nel bot, decisi su delega di Alberto):
 §3.1, §3.6, §3.7, §4; con il giro B (la ripresa che riprende, decisa su
-delega di Alberto): §3.1, §3.7, §3.8, §4; e con il giro C (avvio, container,
+delega di Alberto): §3.1, §3.7, §3.8, §4; con il giro C (avvio, container,
 piano reale e rilievi minori, decisi su delega di Alberto): §3.1, §3.7, §3.8,
-§4, §5, §6.
+§4, §5, §6; e con il giro E (la rifinitura dopo la revisione dell'intero ramo,
+decisa su delega di Alberto): §3.1, §3.5, §3.7, §3.8, §4, §5, §6.
 
 ## 1. Perché
 
@@ -47,8 +48,13 @@ e ignora i comandi rivolti ad altri bot.
 - **Con giorni della settimana** (`lun mar mer gio ven sab dom`): quei giorni
   della settimana seguente. `/sondaggio mar gio sab`.
 - **Con date** (`g/m` o `g/m/aaaa`, e anche con il punto: `g.m`, `g.m.aaaa`):
-  quelle date. Senza anno, l'anno è quello della prossima volta che la data
-  arriva, oggi compreso (il `29/2`, il prossimo 29 febbraio). Le cifre sono
+  quelle date. Senza anno, la data è quella più vicina a oggi fra l'anno
+  scorso, quest'anno e il prossimo (a pari distanza, quella che viene): in
+  pratica la prossima volta che la data arriva, oggi compreso (il 28/12, `2/1`
+  è il 2 gennaio dopo), salvo una data passata da meno di sei mesi, che resta
+  nel passato ed è «già passata» (il 7/10, `3/10` è il 3 ottobre di quattro
+  giorni prima, non quello dell'anno dopo). Il `29/2` fuori da un anno
+  bisestile è il prossimo 29 febbraio, anche se è lontano. Le cifre sono
   quelle ASCII. `/sondaggio 14/10 16/10`.
 - Giorni e date si possono mescolare. Le date si ordinano e i doppioni si
   tolgono.
@@ -154,6 +160,17 @@ annunci mandare si calcola dallo stato (voti) e dagli annunci già fatti, con un
 funzione pura: rifarlo non ripete niente, e un messaggio non partito riparte al
 giro seguente (§4).
 
+Gli annunci contano solo le date da oggi in poi (nel fuso `Europe/Zurich`): una
+data passata non si annuncia più come «quasi» o «possibile», non entra fra le
+date di «impossibile» (né fra quelle «Con tre», che `/chiudi` rifiuterebbe come
+passate), e un «possibile» già annunciato su una data che passa non diventa
+«non più possibile» (non lo è: è passata). «Impossibile» non si annuncia se una
+data passata era stata annunciata come possibile e nessuno l'ha ritirata (nessun
+«non più possibile»): probabilmente quel giorno si è giocato, e «nessuna di
+queste date» il giorno dopo sarebbe falso nei fatti. Senza una data così,
+quando passa l'ultima data ancora in gioco e le altre sono fuori, «impossibile»
+si annuncia anche senza un voto nuovo.
+
 ### 3.6 «Nessuna di queste»
 
 Una lista di frasi in `testi.py`, tutte di al massimo 100 caratteri (il limite
@@ -192,7 +209,12 @@ che si chiude come se fosse aperto, §3.8)
   elenca. Se c'erano date possibili ma sono tutte passate, il riepilogo è «🔒
   Sondaggio chiuso. Nessuna data possibile da oggi in poi.» (l'altro testo
   direbbe che nessuna data aveva il master e quattro giocatori, e sarebbe
-  falso). Vale per ogni chiusura che dice le date possibili.
+  falso). Vale per ogni chiusura che dice le date possibili. Le date possibili
+  si contano sui voti che il bot ha registrato: se i conteggi che `stopPoll`
+  restituisce sono diversi da quelli del bot (contati come alla ripresa,
+  §3.8), prima del riepilogo il bot scrive «I conteggi del sondaggio sono
+  diversi dai miei: qualcuno ha votato o cambiato voto senza che lo sapessi.»
+  (è il caso di un `/chiudi` arrivato con la lettura dopo il buio, §3.8).
 - **`/chiudi 14/10`** (una data del sondaggio, `g/m` o `g.m`, o il suo giorno,
   `mar`): ferma il sondaggio e scrive «🎲 Si gioca martedì 14/10.» (giorno per
   intero). Un giorno conta solo con le sue date da oggi in poi: con un solo
@@ -203,7 +225,9 @@ che si chiude come se fosse aperto, §3.8)
   - una data che non era nel sondaggio: «La data 15/10 non era nel
     sondaggio.»;
   - una data del sondaggio già passata (scritta come data o come giorno): «La
-    data 8/10 è già passata.» (il testo di §3.1, con la data in forma `g/m`);
+    data 8/10 è già passata.» (il testo di §3.1, con la data in forma `g/m`),
+    anche quando una ripresa l'ha tolta dal sondaggio riaperto (§3.8): le date
+    con cui il sondaggio è nato contano tutte;
   - un giorno che nel sondaggio non c'è: «Nel sondaggio non c'è nessun
     venerdì.» («nessuna domenica»);
   - un giorno che nel sondaggio c'è più di una volta: «Nel sondaggio c'è più
@@ -318,12 +342,22 @@ aggiornamenti ricevuti:
    Un sondaggio nato nella lettura stessa (un `/sondaggio` arrivato con gli
    aggiornamenti del buio) non ha voti persi: non si ferma e non si rifà, e il
    bot scrive solo il messaggio del punto 1.
+
+   `getUpdates` dà al massimo 100 aggiornamenti per lettura. Un lotto pieno
+   dopo il buio dice che ne restano forse altri: la ripresa aspetta il primo
+   lotto che non è pieno, così i voti arrivati nel buio contano nel confronto,
+   e fino a lì la lettura non si segna (il buio resta). Il buio finisce con la
+   prima lettura riuscita (è l'ora del messaggio del punto 1), e un sondaggio
+   nato in uno di questi lotti è nato nella lettura stessa (sopra). L'ora della
+   prima lettura il bot la tiene in memoria: dopo un riavvio fra un lotto e
+   l'altro vale quella della lettura che fa cominciare la ripresa.
 3. **Lo riapre** con le date non ancora passate (stessa domanda, frase di
    «Nessuna» nuova) e **tiene buoni i voti registrati**: valgono per il
    sondaggio nuovo finché la persona non vota nel nuovo, e allora vale il voto
    nuovo. Messaggio: «Riapro il sondaggio. Ho già i voti di abe, emi e sem: se
    non avete cambiato idea, non serve rivotare. Non hanno ancora votato: sese,
-   pippo.» (menzioni su chi non ha votato; parti omesse se vuote).
+   pippo.» (menzioni su chi non ha votato; parti omesse se vuote), in risposta
+   al sondaggio riaperto: così si sa quale conta.
    Gli annunci già fatti restano validi (un «possibile» non si ripete).
    Un voto dato nel sondaggio di prima poco prima dello stop, che arriva dopo
    la riapertura, vale se la persona non ha ancora votato nel sondaggio
@@ -343,17 +377,22 @@ ripresa continua dal passo in cui si era fermata, senza ripetere i messaggi già
 salvati; nel log un avviso (un errore, per un rifiuto) la prima volta, e poi al
 massimo ogni 10 minuti. Se il sondaggio riaperto non parte, nel gruppo non si
 dice niente: «riprovate con /sondaggio» (§3.1) farebbe buttare i voti tenuti.
-Se il sondaggio riaperto è partito ma la risposta si è persa, o il processo si
-è fermato prima di salvarlo, la lettura seguente ne manda un altro: nel gruppo
-ce ne sono due (caso raro, accettato, come per `rimanda` in §3.7), e i voti a
-quello che il bot non conosce vanno nel log. Un errore che non viene da
-Telegram (il database, un errore del bot) va nel log con il traceback e ferma
-la ripresa dov'è fino al prossimo avvio, che la riprova una volta: ritentarla a
-ogni lettura ripeterebbe l'errore, o manderebbe un sondaggio nuovo a ogni
-lettura. Fino al riavvio, se il sondaggio è ancora aperto nel database e lo
-stop della ripresa è partito, `/sondaggio` riceve in risposta (lo stop può
-essere stato confermato, e «Telegram non ha ancora confermato…» sarebbe
-falso):
+Se di sicuro non è partito (la pausa dopo un 429, un rifiuto), la lettura
+seguente riprova. Se forse è partito e la risposta si è persa (rete, 5xx, una
+risposta illeggibile: per esempio Telegram che risponde oltre il timeout, §4),
+il bot non ne manda un altro prima di 10 minuti: il momento del tentativo sta
+in memoria, e un riavvio riprova subito. Se il processo si è fermato dopo il
+`sendPoll` e prima di salvarlo, la lettura dopo il riavvio ne manda un altro.
+Nel gruppo può restare un sondaggio in più (uno ogni 10 minuti al massimo, se
+Telegram continua a non rispondere in tempo): caso raro, accettato, come per
+`rimanda` in §3.7; i voti a quello che il bot non conosce vanno nel log. Un
+errore che non viene da Telegram (il database, un errore del bot) va nel log
+con il traceback e ferma la ripresa dov'è fino al prossimo avvio, che la
+riprova una volta: ritentarla a ogni lettura ripeterebbe l'errore, o
+manderebbe un sondaggio nuovo a ogni lettura. Fino al riavvio, se il sondaggio
+è ancora aperto nel database e lo stop della ripresa è partito, `/sondaggio`
+riceve in risposta (lo stop può essere stato confermato, e «Telegram non ha
+ancora confermato…» sarebbe falso):
 
 ```
 Non sono riuscito a completare la chiusura del sondaggio di prima. Chi può chiudere la riprovi con:
@@ -430,6 +469,14 @@ stop della ripresa che Telegram ha rifiutato (4xx). Caso raro, accettato.
   confermato…» (§3.1, §3.7), che parte finita l'attesa. Un invio che non parte
   per la rete o un 5xx va nel log come avviso la prima volta, e poi al massimo
   ogni 10 minuti (un 429 sempre).
+- **Quanto si aspetta Telegram**: le chiamate che scrivono (`sendPoll`,
+  `sendMessage`, `stopPoll`) aspettano la risposta fino a 30 secondi (10 per
+  collegarsi e per mandare la richiesta), `getUpdates` il long polling più 10
+  secondi, le altre 10. Una risposta che non arriva in tempo è persa, e la
+  scrittura forse è avvenuta: un messaggio della posta o un annuncio ripartono
+  al giro seguente, e nel gruppo arrivano una volta in più per ogni risposta
+  persa; il sondaggio riaperto dalla ripresa non riparte prima di 10 minuti
+  (§3.8).
 - **Un annuncio rifiutato** da Telegram (4xx) va nel log come errore e non
   ferma gli annunci seguenti; non conta come fatto. Lo stesso testo avrebbe lo
   stesso rifiuto: il bot non lo riprova fino al prossimo avvio (un errore nel
@@ -470,7 +517,19 @@ stop della ripresa che Telegram ha rifiutato (4xx). Caso raro, accettato.
   409 (il vecchio long poll vive ancora fino a 25 secondi dopo un riavvio) o un
   429 ferma il ciclo: dopo un 429 la pausa è almeno `retry_after`. Il battito si
   tocca a ogni giro, anche dopo un errore e, a fette di 60 secondi, durante
-  un'attesa lunga: dice che il ciclo gira, non che Telegram risponde.
+  un'attesa lunga: dice che il ciclo gira, non che Telegram risponde. Ogni
+  lettura che non riesce è un avviso nel log; quando la pausa arriva a 60
+  secondi (al quinto errore di fila), anche un errore, «lettura del bot non
+  riuscita da N tentativi di fila, l'ultimo: …», una volta sola fino alla
+  prossima lettura riuscita (un 409 o un 429 sono risposte di Telegram: il
+  testo non dice che Telegram non risponde).
+- **Se il bot resta bloccato** su una chiusura in sospeso o su una ripresa
+  anche dopo un riavvio, si sblocca a mano, a servizio fermo, con `prossima
+  sblocca`: toglie la chiusura in sospeso e la ripresa e, se una delle due era
+  del sondaggio aperto, chiude nel database quel sondaggio (su Telegram resta
+  com'è, e il bot ne ignora i voti); un sondaggio aperto senza niente in
+  sospeso non lo tocca. Non scrive nel gruppo, e dice nel log che cosa ha tolto
+  (v. `docs/messa-in-produzione.md`).
 - **Il token non finisce mai nei log** (stessa tecnica del client dei selfie:
   niente testo delle eccezioni di httpx, niente concatenazione, logger `httpx`
   a WARNING).
@@ -492,7 +551,8 @@ httpx, `tzdata` (il fuso nel container). Nessuna parte web, nessuna porta.
 | `src/prossima/chiusura.py` | `/chiudi` (le date possibili, la data tenuta, `rimanda`), la chiusura in sospeso e i suoi tentativi, il completamento (§3.7). |
 | `src/prossima/ripresa.py` | La ripresa dopo il buio, un passo alla volta (§3.8). |
 | `src/prossima/invio.py` | Ogni chiamata che scrive su Telegram: la pausa dopo un 429, la posta in uscita, il sondaggio nuovo con la frase di «Nessuna», lo stop; come leggere un errore di Telegram, e la regola degli avvisi nel log che si ripetono (§4). |
-| `src/prossima/principale.py` | Avvio e ciclo; il battito per il controllo di salute. |
+| `src/prossima/principale.py` | Avvio e ciclo; il battito per il controllo di salute (`prossima salute`); `prossima sblocca`. |
+| `src/prossima/sblocco.py` | Lo sblocco a mano, a servizio fermo: toglie la chiusura in sospeso e la ripresa, chiude nel database il sondaggio aperto se una delle due era sua, e dice che cosa ha tolto (§4). |
 
 Le parti del bot dipendono una dall'altra in un senso solo: `bot.py` →
 `chiusura.py` → `ripresa.py` → `invio.py`. Ognuna tiene le sue strutture in
@@ -530,10 +590,11 @@ chiaro.
 come PID 1, SIGTERM sarebbe ignorato e `docker compose stop` aspetterebbe 10
 secondi prima di uccidere il processo; con un init il segnale arriva a Python,
 che termina subito: lo stato si recupera a ogni riavvio, §4), volumi
-`./dati:/data` e `./config:/config:ro`. Controllo di salute: il battito (un file
-che il ciclo tocca a ogni giro) ha meno di 2 minuti. Dopo aver corretto il
-roster o `prossima.env`, `docker compose up -d`: il riavvio automatico non
-rilegge `prossima.env`.
+`./dati:/data` e `./config:/config:ro`, il log di Docker che ruota (`json-file`,
+tre file da 10 MB al massimo). Controllo di salute: il battito (un file che il
+ciclo tocca a ogni giro) ha meno di 2 minuti. Dopo aver corretto il roster o
+`prossima.env`, `docker compose up -d`: il riavvio automatico non rilegge
+`prossima.env`.
 
 **Il bot**: nuovo, da @BotFather, privacy attiva (il default), aggiunto al
 gruppo del party. All'avvio registra i comandi (`setMyCommands`): `sondaggio`
@@ -568,7 +629,11 @@ gruppo del party. All'avvio registra i comandi (`setMyCommands`): `sondaggio`
   arriva in tre minuti, il fallimento suggerisce di controllare che il servizio
   sia fermo e che il voto sia stato dato.
 - **A mano, nel gruppo**: `/sondaggio@<bot>` dal menu arriva al bot con la privacy
-  attiva; le menzioni notificano.
+  attiva; le menzioni notificano, anche chi non ha mai scritto al bot (il piano
+  reale menziona solo Alberto, che ha scritto `/start` al bot: una menzione
+  per identificativo verso chi non l'ha fatto potrebbe non notificare, o il
+  messaggio potrebbe essere rifiutato). Le sei persone del roster scrivono
+  `/start` al bot in privato una volta.
 - **`docs/differenze-fra-test-e-realta.md`**, scritto prima dei finti.
 
 ## 7. Fuori perimetro

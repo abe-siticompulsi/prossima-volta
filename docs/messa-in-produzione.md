@@ -14,6 +14,13 @@ file, senza mai scriverlo nella riga di comando.
 3. Aggiungi il bot al gruppo del party.
 4. Scrivi `/start` al bot **in privato**: senza, il bot non può scriverti, e il
    piano reale (punto 6) non funziona.
+5. Chiedi alle altre cinque persone del roster di scrivere anche loro `/start`
+   al bot in privato, una volta. Il bot le menziona per identificativo («Non
+   hanno ancora votato: …», «gio, abe: /chiudi…»), e che cosa succede a una
+   menzione verso chi non gli ha mai scritto non è verificato: potrebbe non
+   notificare, o Telegram potrebbe rifiutare il messaggio (v.
+   `docs/differenze-fra-test-e-realta.md`). Nemmeno con `/start` la notifica è
+   verificata nel gruppo: il controllo a mano (punto 5) prova i due casi.
 
 ## 2. Il codice
 
@@ -80,7 +87,12 @@ secondi (`init: true` in `compose.yaml` fa arrivare il segnale a Python). Poi
   `/sondaggio`: il menu scrive `/sondaggio@<nome_del_bot>`, e il sondaggio della
   settimana seguente compare nel gruppo.
 - Quando arriva il primo annuncio con dei nomi («Non hanno ancora votato: …»),
-  chiedi alle persone nominate se hanno ricevuto la notifica.
+  chiedi alle persone nominate se hanno ricevuto la notifica. Il controllo
+  copre due casi: una persona che ha già scritto `/start` al bot (punto 1) e
+  una che non l'ha ancora fatto (finché qualcuno non l'ha fatto, è il momento).
+  Se l'annuncio non compare nel gruppo, cerca nel log «annuncio rifiutato da
+  Telegram». Il piano reale non prova né l'uno né l'altro nel gruppo: lì il bot
+  menziona solo te, in privato.
 - Chiudi il sondaggio di prova con `/chiudi`.
 
 ## 6. Il piano reale
@@ -96,7 +108,7 @@ scrivi il tuo identificativo subito dopo il segno `=`, senza altro sulla riga
 
 ```bash
 docker compose stop prossima
-docker compose --profile prova run --rm prova
+docker compose --profile prova run --rm --build prova
 docker compose start prossima
 ```
 
@@ -105,6 +117,33 @@ minuti: fai quello che dice la domanda (spunta la prima e la terza data e vota,
 ritira il voto, spunta la seconda e vota). Il piano reale è verde solo se **non
 salta niente**: un test saltato non è un test superato, e `-rs` dice quale
 variabile mancava.
+
+## Se il bot resta bloccato
+
+Il bot ritenta da solo quello che Telegram non conferma, e a ogni avvio riprova
+una volta quello che si è fermato per un altro errore. Se anche dopo un riavvio
+(`docker compose restart prossima`) resta fermo su una chiusura o su una
+ripresa (nel gruppo `/sondaggio` risponde sempre «Telegram non ha ancora
+confermato la chiusura del sondaggio di prima…» o «Non sono riuscito a
+completare la chiusura del sondaggio di prima…», e un `/chiudi` non lo
+sblocca; nel log tornano «chiusura del sondaggio N non completata» o «ripresa
+del sondaggio N non riuscita»), prima guarda nel log il perché: «chiusura del
+sondaggio N rifiutata da Telegram» (il bot tolto dal gruppo, per esempio) si
+sistema su Telegram. Poi, a servizio fermo:
+
+```bash
+docker compose stop prossima
+docker compose run --rm prossima prossima sblocca
+docker compose start prossima
+```
+
+`prossima sblocca` toglie la chiusura in sospeso e la ripresa e, se una delle
+due era del sondaggio aperto, chiude nel database quel sondaggio. Un sondaggio
+aperto senza niente in sospeso non lo tocca: il comando si può provare senza
+rischi. Nel log scrive una riga per ogni cosa che ha tolto («niente da
+sbloccare», se non c'era niente). Nel gruppo non scrive niente. Su Telegram il
+sondaggio chiuso così resta com'è e il bot ne ignora i voti: se serve, lanciane
+uno nuovo con `/sondaggio`.
 
 ## Aggiornare
 
