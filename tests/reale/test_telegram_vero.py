@@ -107,20 +107,23 @@ def test_un_sondaggio_con_undici_opzioni_parte():
 def test_sondaggio_voto_ritiro_e_conteggi():
     """Contratti: un sondaggio non anonimo a risposta multipla con 11 opzioni
     (10 date e la frase più lunga) parte; ogni voto arriva come `poll_answer`
-    con l'identificativo di chi vota e le opzioni da 0; il voto ritirato arriva
-    con le opzioni vuote; `stopPoll` dà i conteggi per opzione, in ordine."""
+    con l'identificativo di chi vota e le opzioni da 0; togliere una sola data
+    manda le opzioni rimaste (il voto intero, che sostituisce il precedente); il
+    voto ritirato arriva con le opzioni vuote; `stopPoll` dà i conteggi per
+    opzione, in ordine."""
     b = bot()
     date_ = [date.today() + timedelta(days=i) for i in range(1, regole.MASSIMO_DATE + 1)]
     frase = frase_piu_lunga()
     mandato = b.manda_sondaggio(
         chat(),
         "🧪 Prova di Prossima volta: spunta la prima e la terza data e vota; "
-        "poi ritira il voto; poi spunta la seconda e vota.",
+        "poi togli solo la terza; poi ritira il voto; poi spunta la seconda e vota.",
         testi.opzioni(date_, frase),
     )
-    primo, ritiro, secondo = risposte(b, mandato.poll_id, 3)
+    primo, senza_la_terza, ritiro, secondo = risposte(b, mandato.poll_id, 4)
     assert primo["user"]["id"] == chat()
     assert primo["option_ids"] == [0, 2]
+    assert senza_la_terza["option_ids"] == [0]
     assert ritiro["option_ids"] == []
     assert secondo["option_ids"] == [1]
     assert b.ferma_sondaggio(chat(), mandato.messaggio) == [0, 1] + [0] * 9

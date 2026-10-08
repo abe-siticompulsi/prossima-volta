@@ -5394,3 +5394,9 @@ la descrizione di un messaggio cancellato, le menzioni, i voti. Il nono era
 sbagliato: un secondo `stopPoll` sullo stesso sondaggio risponde «Bad Request:
 poll can't be stopped», non «poll has already been closed». `_GIA_CHIUSO`
 riconosce adesso tutte e due, e il finto usa la descrizione vera.
+
+Al secondo giro del piano reale Alberto ha tolto una data alla volta invece di
+ritirare il voto intero: Telegram ha mandato le opzioni rimaste (`[0]`), un voto
+cambiato che il bot sostituisce al precedente come ogni altro. Il codice era già
+giusto; la prova adesso chiede anche questo passo (togli solo la terza, poi
+ritira il voto).
