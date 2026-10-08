@@ -106,7 +106,7 @@ class TelegramFinto:
         if messaggio in self.cancellati:
             raise MessaggioSparito("stopPoll: Bad Request: message to stop not found")
         if messaggio in self.fermati:
-            raise SondaggioGiaChiuso("stopPoll: Bad Request: poll has already been closed")
+            raise SondaggioGiaChiuso("stopPoll: Bad Request: poll can't be stopped")
         self._registra("ferma_sondaggio", chat_id=chat_id, messaggio=messaggio)
         sondaggio = next(s for s in self.sondaggi if s["messaggio"] == messaggio)
         self.fermati.add(messaggio)

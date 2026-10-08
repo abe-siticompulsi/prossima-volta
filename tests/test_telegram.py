@@ -125,9 +125,18 @@ def test_ferma_sondaggio_di_un_messaggio_cancellato():
         bot.ferma_sondaggio(-100, 501)
 
 
-def test_ferma_sondaggio_gia_chiuso():
-    bot = bot_con(lambda r: rifiuto(400, "Bad Request: poll has already been closed"))
-    with pytest.raises(SondaggioGiaChiuso, match="stopPoll: Bad Request: poll has already") as errore:
+@pytest.mark.parametrize(
+    "descrizione",
+    [
+        # quella vera, vista dal piano reale il 2026-10-08
+        "Bad Request: poll can't be stopped",
+        # quella che il client si aspettava prima, e che altri client citano
+        "Bad Request: poll has already been closed",
+    ],
+)
+def test_ferma_sondaggio_gia_chiuso(descrizione):
+    bot = bot_con(lambda r: rifiuto(400, descrizione))
+    with pytest.raises(SondaggioGiaChiuso, match=f"stopPoll: {descrizione}") as errore:
         bot.ferma_sondaggio(-100, 501)
     assert isinstance(errore.value, TelegramRifiuto)
     assert not isinstance(errore.value, MessaggioSparito)

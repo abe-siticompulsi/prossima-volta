@@ -139,10 +139,10 @@ def test_fermare_un_sondaggio_cancellato():
 
 def test_fermare_due_volte():
     """Contratto: un secondo `stopPoll` sullo stesso sondaggio risponde con una
-    descrizione che `SondaggioGiaChiuso` riconosce («poll has already been
-    closed»). Da lì dipende la ripresa di una chiusura interrotta: se la
-    descrizione vera è un'altra, la prova la riporta, e si corregge
-    `_GIA_CHIUSO` in `telegram.py` (e le differenze fra test e realtà)."""
+    descrizione che `SondaggioGiaChiuso` riconosce (il 2026-10-08: «Bad Request:
+    poll can't be stopped»). Da lì dipende la ripresa di una chiusura
+    interrotta: se Telegram cambia descrizione, la prova la riporta, e si
+    corregge `_GIA_CHIUSO` in `telegram.py` (e le differenze fra test e realtà)."""
     b = bot()
     mandato = b.manda_sondaggio(chat(), "🧪 Prova di Prossima volta: mi fermo due volte.", ["sì", "no"])
     assert b.ferma_sondaggio(chat(), mandato.messaggio) == [0, 0]

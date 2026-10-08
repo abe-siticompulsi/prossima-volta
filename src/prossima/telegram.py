@@ -29,8 +29,9 @@ import httpx
 
 # Telegram descrive un messaggio che non c'è più come «message to … not found».
 _SPARITO = re.compile(r"message[^:]*not found|MESSAGE_ID_INVALID", re.IGNORECASE)
-# e un sondaggio fermato una seconda volta come «poll has already been closed».
-_GIA_CHIUSO = re.compile(r"poll[^:]*already[^:]*closed", re.IGNORECASE)
+# e un sondaggio fermato una seconda volta come «poll can't be stopped» (visto dal
+# piano reale il 2026-10-08; altri client citano «poll has already been closed»).
+_GIA_CHIUSO = re.compile(r"poll can.t be stopped|poll[^:]*already[^:]*closed", re.IGNORECASE)
 # Le chiamate che scrivono (`sendPoll`, `sendMessage`, `stopPoll`) aspettano la
 # risposta fino a 30 secondi: una risposta che arriva dopo il timeout è persa, e
 # la scrittura forse è avvenuta (un sondaggio o un messaggio in più, se il bot

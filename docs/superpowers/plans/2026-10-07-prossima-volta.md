@@ -5386,3 +5386,11 @@ qui: utente 10001 nel `Dockerfile` (servizio e prova), e in `compose.yaml`
 e frasi leggibili dal suo gruppo (640). Docker non c'è sul Mac:
 `tests/test_container.py` controlla solo il testo, l'avvio vero è fra i controlli
 a mano sul server.
+
+### Il primo piano reale (2026-10-08)
+
+Otto contratti su nove confermati, nessuno saltato. Fra questi: le 11 opzioni,
+la descrizione di un messaggio cancellato, le menzioni, i voti. Il nono era
+sbagliato: un secondo `stopPoll` sullo stesso sondaggio risponde «Bad Request:
+poll can't be stopped», non «poll has already been closed». `_GIA_CHIUSO`
+riconosce adesso tutte e due, e il finto usa la descrizione vera.

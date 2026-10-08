@@ -45,7 +45,7 @@ def test_il_finto_rifiuta_il_secondo_stop_come_il_vero():
     telegram = TelegramFinto()
     mandato = telegram.manda_sondaggio(-100, "Prossima volta?", ["mar 14/10", "Nessuna: x"])
     telegram.ferma_sondaggio(-100, mandato.messaggio)
-    with pytest.raises(SondaggioGiaChiuso, match="stopPoll: Bad Request: poll has already been closed"):
+    with pytest.raises(SondaggioGiaChiuso, match="stopPoll: Bad Request: poll can't be stopped"):
         telegram.ferma_sondaggio(-100, mandato.messaggio)
     assert len(telegram.di_tipo("ferma_sondaggio")) == 1
 
