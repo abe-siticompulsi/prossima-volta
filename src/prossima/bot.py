@@ -173,6 +173,7 @@ class Bot:
             self._invio.manda_posta()
             if self._chiusure.riprova():
                 self._invio.manda_posta()
+            self._togli_bottoni_superati()
             self._manda_annunci()
         except TelegramError as e:
             self._invio.avvisa("invio rimandato al giro seguente: %s", e)
@@ -206,7 +207,7 @@ class Bot:
         if (
             messaggio.get("chat", {}).get("id") != self._gruppo
             or azione != "chiudi"
-            or not sondaggio_id.isdigit()
+            or not (sondaggio_id.isascii() and sondaggio_id.isdigit())
             or not argomento
         ):
             self._invio.rispondi_al_tocco(tocco["id"])
@@ -220,12 +221,20 @@ class Bot:
             self._invio.rispondi_al_tocco(tocco["id"], testi.gia_chiuso_al_tocco().testo)
             self._invio.togli_bottoni(messaggio["message_id"])
             return
-        self._invio.rispondi_al_tocco(tocco["id"])
-        comando = {"message_id": messaggio["message_id"], "from": tocco["from"], "chat": messaggio["chat"]}
-        self._chiusure.chiudi(comando, [argomento])
-        dopo = self._store.sondaggio_aperto() or self._ripresa.in_riapertura()
-        if dopo is None or dopo.id != sondaggio.id:
+        if self._store.messaggio_con_bottoni() != (sondaggio.id, messaggio["message_id"]):
+            # un «impossibile» più recente ha i bottoni che valgono
+            self._invio.rispondi_al_tocco(tocco["id"], testi.bottoni_vecchi().testo)
             self._invio.togli_bottoni(messaggio["message_id"])
+            return
+        self._invio.rispondi_al_tocco(tocco["id"])
+        comando = {
+            "message_id": messaggio["message_id"],
+            "from": tocco["from"],
+            "chat": messaggio["chat"],
+            "tocco": True,
+        }
+        self._chiusure.chiudi(comando, [argomento])
+        # i bottoni li toglie `manda`, appena il sondaggio non è più aperto
 
     def _comando(self, parola: str) -> str | None:
         """«/sondaggio» o «/sondaggio@<nome del bot>» → «sondaggio»; un comando
@@ -366,12 +375,13 @@ class Bot:
         if regole.rientrato(stato, fatti):
             fatti = regole.dopo(fatti, regole.Rientro())
             self._store.salva_fatti(sondaggio.id, fatti)
+            self._togli_bottoni()  # una data è tornata in gioco: non c'è più da decidere
         for gruppo in _per_tipo(regole.annunci_da_fare(stato, fatti)):
             if (sondaggio.id, gruppo) in self._annunci_rifiutati:
                 continue
             testo = testi.annunci(gruppo, self._roster, self._nome, sondaggio.date, sondaggio.id)
             try:
-                self._invio.scrivi(testo)
+                messaggio = self._invio.scrivi(testo)
             except TelegramRifiuto as e:
                 # non è fatto, e lo stesso testo avrebbe lo stesso rifiuto: si
                 # salta fino al prossimo avvio; gli altri partono
@@ -381,6 +391,26 @@ class Bot:
             for annuncio in gruppo:
                 fatti = regole.dopo(fatti, annuncio)
             self._store.salva_fatti(sondaggio.id, fatti)
+            if testo.bottoni:
+                self._togli_bottoni()  # quelli di un «impossibile» di prima
+                self._store.segna_messaggio_con_bottoni(sondaggio.id, messaggio)
+
+    def _togli_bottoni(self) -> None:
+        """Toglie i bottoni dell'ultimo «impossibile», se ci sono: al meglio."""
+        con_bottoni = self._store.messaggio_con_bottoni()
+        if con_bottoni is not None:
+            self._invio.togli_bottoni(con_bottoni[1])
+            self._store.togli_messaggio_con_bottoni()
+
+    def _togli_bottoni_superati(self) -> None:
+        """Il sondaggio dei bottoni non è più aperto (chiuso, rimandato): via i
+        bottoni, che non porterebbero a niente."""
+        con_bottoni = self._store.messaggio_con_bottoni()
+        if con_bottoni is None:
+            return
+        aperto = self._store.sondaggio_aperto() or self._ripresa.in_riapertura()
+        if aperto is None or aperto.id != con_bottoni[0]:
+            self._togli_bottoni()
 
     # --- i pezzi
 

@@ -182,7 +182,7 @@ def annunci(
     roster: regole.Roster,
     nome_bot: str,
     date_sondaggio: Sequence[date],
-    sondaggio_id: int = 0,
+    sondaggio_id: int | None = None,
 ) -> Testo:
     """Un messaggio per un gruppo di annunci dello stesso tipo, nell'ordine
     delle date (§3.5). Le date si dicono per giorno se il sondaggio sta in una
@@ -234,10 +234,13 @@ def _non_piu(
 
 
 def _impossibile(
-    a: regole.Impossibile, roster: regole.Roster, solo_il_giorno: bool, sondaggio_id: int
+    a: regole.Impossibile, roster: regole.Roster, solo_il_giorno: bool, sondaggio_id: int | None
 ) -> Testo:
     """Menziona il master, che decide con i bottoni (§3.10); se il master non
-    può chiudere, chi può."""
+    può chiudere, chi può. Senza il sondaggio i bottoni non porterebbero a
+    niente: è un errore di chi chiama."""
+    if sondaggio_id is None:
+        raise ValueError("«impossibile» ha i bottoni: serve il sondaggio")
     chi = (roster.master,) if roster.master.chiude else roster.chi_chiude
     s = _Scrittura()
     if a.con_tre:
@@ -393,6 +396,11 @@ def voto_sconosciuto(
 
 def solo_chi_chiude(roster: regole.Roster) -> Testo:
     return Testo(f"Il sondaggio lo {chi_chiude(roster)}.")
+
+
+def bottoni_vecchi() -> Testo:
+    """L'avviso per chi tocca i bottoni di un «impossibile» superato da uno nuovo."""
+    return Testo("Questi bottoni non valgono più.")
 
 
 def gia_chiuso_al_tocco() -> Testo:

@@ -5,6 +5,7 @@ import logging
 import pytest
 
 from prossima.bot import ATTESA_ANNUNCI
+from prossima.telegram import TelegramTroppeRichieste
 from tests.aggiornamenti import GRUPPO, comando, fino_al, tocco, vota
 from tests.finti import telegram_guasto
 from tests.tavolo import ABE, EMI, GIO, PIPPO, SEM, SESE
@@ -75,12 +76,13 @@ def test_chi_non_puo_chiudere_ha_un_avviso_e_non_cambia_niente(telegram, store, 
 def test_un_bottone_di_un_sondaggio_gia_chiuso(telegram, store, impossibile):
     bot, sondaggio, messaggio = impossibile
     bot.ricevi([comando("/chiudi")])
+    # chiuso il sondaggio, i bottoni si tolgono subito
+    assert telegram.di_tipo("togli_bottoni") == [{"chat_id": GRUPPO, "messaggio": messaggio}]
     t = tocco(f"chiudi:{sondaggio.id}:rimanda", messaggio)
     bot.ricevi([t])
     assert telegram.di_tipo("rispondi_al_tocco") == [
         {"tocco_id": t["callback_query"]["id"], "avviso": "Il sondaggio è già chiuso."}
     ]
-    assert telegram.di_tipo("togli_bottoni") == [{"chat_id": GRUPPO, "messaggio": messaggio}]
     assert len(telegram.di_tipo("manda_sondaggio")) == 1  # niente rimando
 
 
@@ -104,7 +106,14 @@ def test_due_bottoni_toccati_di_fila_vale_il_primo(telegram, store, impossibile)
 
 @pytest.mark.parametrize(
     ("dato", "chat"),
-    [("chiudi:{id}:13/10", -42), ("boh", GRUPPO), ("chiudi:x:13/10", GRUPPO), ("chiudi:{id}", GRUPPO)],
+    [
+        ("chiudi:{id}:13/10", -42),
+        ("boh", GRUPPO),
+        ("chiudi:x:13/10", GRUPPO),
+        ("chiudi:{id}", GRUPPO),
+        ("chiudi:{id}:", GRUPPO),
+        ("chiudi:²:13/10", GRUPPO),
+    ],
 )
 def test_un_tocco_che_non_e_per_il_bot_non_fa_niente(telegram, store, impossibile, dato, chat):
     bot, sondaggio, messaggio = impossibile
@@ -145,3 +154,100 @@ def test_una_data_passata_ha_il_rifiuto_di_chiudi_e_i_bottoni_restano(
     assert telegram.scritti()[-1] == "La data 13/10 è già passata."
     assert store.sondaggio_aperto() == sondaggio
     assert telegram.di_tipo("togli_bottoni") == []
+
+
+def test_un_altro_bottone_mentre_la_chiusura_e_in_sospeso_cambia_la_decisione(
+    telegram, store, impossibile
+):
+    """Come un altro /chiudi: vale l'ultima decisione."""
+    bot, sondaggio, messaggio = impossibile
+    telegram.guasti["ferma_sondaggio"] = telegram_guasto("ferma_sondaggio")
+    bot.ricevi([tocco(f"chiudi:{sondaggio.id}:13/10", messaggio)])
+    bot.ricevi([tocco(f"chiudi:{sondaggio.id}:rimanda", messaggio, da=ABE.telegram_id)])
+    assert store.chiusura_sospesa().argomento == "rimanda"
+    del telegram.guasti["ferma_sondaggio"]
+    bot.ricevi([])
+    assert "🎲 Si gioca lunedì 13/10." not in telegram.scritti()
+    assert telegram.scritti()[-1] == "🔁 Rimandiamo: nuovo sondaggio sulla settimana del 20/10."
+
+
+def test_lo_stesso_tocco_riletto_con_la_chiusura_in_sospeso_non_ripete_niente(telegram, impossibile):
+    bot, sondaggio, messaggio = impossibile
+    telegram.guasti["ferma_sondaggio"] = telegram_guasto("ferma_sondaggio")
+    t = tocco(f"chiudi:{sondaggio.id}:13/10", messaggio)
+    bot.ricevi([t])
+    bot.ricevi([t])
+    assert telegram.scritti().count(
+        "Telegram non ha confermato la chiusura del sondaggio: riprovo da solo."
+    ) == 1
+
+
+def test_il_rimanda_vecchio_dopo_un_rimanda_scritto_non_rimanda_di_nuovo(telegram, impossibile):
+    bot, sondaggio, messaggio = impossibile
+    bot.ricevi([comando("/chiudi rimanda")])
+    t = tocco(f"chiudi:{sondaggio.id}:rimanda", messaggio)
+    bot.ricevi([t])
+    assert telegram.di_tipo("rispondi_al_tocco")[-1]["avviso"] == "Il sondaggio è già chiuso."
+    assert len(telegram.di_tipo("manda_sondaggio")) == 2
+
+
+def test_un_tocco_sul_sondaggio_fermato_dalla_ripresa_lo_chiude(telegram, store, orologio, impossibile):
+    """Dopo il buio la ripresa ha fermato il sondaggio e aspetta di riaprirlo: il
+    tocco lo chiude come lo chiuderebbe /chiudi."""
+    bot, sondaggio, messaggio = impossibile
+    telegram.conteggi[sondaggio.messaggio] = [4, 0, 2]
+    telegram.guasti["manda_sondaggio"] = telegram_guasto("manda_sondaggio")
+    orologio.avanza(hours=24)
+    bot.ricevi([])
+    assert store.sondaggio_aperto() is None  # fermato, e la riapertura aspetta 10 minuti
+    del telegram.guasti["manda_sondaggio"]
+    bot.ricevi([tocco(f"chiudi:{sondaggio.id}:rimanda", messaggio)])
+    assert any(t.startswith("🔁 Rimandiamo") for t in telegram.scritti())
+    assert store.ripresa() is None
+
+
+def test_durante_la_pausa_di_un_429_il_tocco_non_chiama_telegram(telegram, store, impossibile):
+    bot, sondaggio, messaggio = impossibile
+    telegram.guasti["scrivi"] = TelegramTroppeRichieste("sendMessage: Too Many Requests", 60)
+    bot.ricevi([comando("/aiuto")])  # la risposta prende il 429: comincia la pausa
+    del telegram.guasti["scrivi"]
+    bot.ricevi([tocco(f"chiudi:{sondaggio.id}:13/10", messaggio)])
+    assert telegram.di_tipo("rispondi_al_tocco") == []
+    assert telegram.di_tipo("ferma_sondaggio") == []
+    assert store.chiusura_sospesa() is not None  # lo stop riparte dopo la pausa
+
+
+def test_la_chiusura_completata_dopo_toglie_i_bottoni(telegram, store, impossibile):
+    bot, sondaggio, messaggio = impossibile
+    telegram.guasti["ferma_sondaggio"] = telegram_guasto("ferma_sondaggio")
+    bot.ricevi([tocco(f"chiudi:{sondaggio.id}:13/10", messaggio)])
+    assert telegram.di_tipo("togli_bottoni") == []
+    del telegram.guasti["ferma_sondaggio"]
+    bot.ricevi([])
+    assert store.sondaggio_aperto() is None
+    assert telegram.di_tipo("togli_bottoni") == [{"chat_id": GRUPPO, "messaggio": messaggio}]
+
+
+def test_un_impossibile_nuovo_toglie_i_bottoni_del_vecchio(telegram, store, orologio, impossibile):
+    """Lunedì torna in gioco (i bottoni non servono più) e poi esce di nuovo: un
+    altro «impossibile», con i bottoni suoi; quelli del primo non valgono più."""
+    bot, sondaggio, vecchio = impossibile
+    vota(bot, telegram, SESE, "13/10")  # lunedì va bene
+    orologio.avanza(minutes=3)
+    bot.ricevi([])
+    assert telegram.di_tipo("togli_bottoni") == [{"chat_id": GRUPPO, "messaggio": vecchio}]
+    vota(bot, telegram, SESE, "nessuna")
+    vota(bot, telegram, SEM, "nessuna")  # lunedì resta con Gio, Abe ed Emi
+    orologio.avanza(minutes=3)
+    bot.ricevi([])
+    nuovo = telegram.ultimo_scritto
+    assert telegram.scritti()[-1].startswith("😬 ")
+    assert nuovo != vecchio
+    t = tocco(f"chiudi:{sondaggio.id}:13/10", vecchio)
+    bot.ricevi([t])
+    assert telegram.di_tipo("rispondi_al_tocco")[-1] == {
+        "tocco_id": t["callback_query"]["id"],
+        "avviso": "Questi bottoni non valgono più.",
+    }
+    assert store.sondaggio_aperto() == sondaggio
+    assert "🎲 Si gioca lunedì 13/10." not in telegram.scritti()

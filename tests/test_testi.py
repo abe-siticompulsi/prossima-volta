@@ -145,11 +145,11 @@ def test_impossibile_su_due_settimane_dice_il_numero_nei_bottoni():
 
 def test_impossibile_menziona_chi_chiude_se_il_master_non_puo():
     roster = Roster((replace(GIO, chiude=False), ABE, EMI, SEM, SESE, PIPPO))
-    t = testi.annunci([regole.Impossibile(())], roster, NOME, SETTIMANA_PROVE)
+    t = testi.annunci([regole.Impossibile(())], roster, NOME, SETTIMANA_PROVE, 7)
     assert t.testo.endswith("nemmeno con tre. Abe, decidi tu:")
     assert menzionati(t) == [("Abe", ABE.telegram_id)]
     due = Roster((replace(GIO, chiude=False), ABE, replace(EMI, chiude=True), SEM, SESE, PIPPO))
-    t = testi.annunci([regole.Impossibile(())], due, NOME, SETTIMANA_PROVE)
+    t = testi.annunci([regole.Impossibile(())], due, NOME, SETTIMANA_PROVE, 7)
     assert t.testo.endswith("nemmeno con tre. Abe e Emi, decidete voi:")
 
 
@@ -465,3 +465,8 @@ def test_in_aiuto_tutti_i_comandi_sono_codice():
     assert codici(testi.aiuto(NOME, ROSTER, (0, 1, 2, 3, 4, 6))) == [
         s, f"{s} con sabato", f"{s} mar gio", f"{s} 14/10 16/10", c, f"{c} 14/10", f"{c} rimanda"
     ]
+
+
+def test_impossibile_senza_il_sondaggio_non_fa_bottoni_morti():
+    with pytest.raises(ValueError):
+        testi.annunci([regole.Impossibile(())], ROSTER, NOME, SETTIMANA_PROVE)

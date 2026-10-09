@@ -5466,3 +5466,15 @@ Il piano è `docs/superpowers/plans/2026-10-10-bottoni.md`, la spec §3.5 (punto
   dopo il primo, non chiude due volte.
 - Con più persone che possono chiudere e un master che non può, il testo dice «Abe e Emi, decidete voi:».
 - Il piano reale chiede ad Alberto di toccare un bottone nella chat privata.
+- La revisione del ramo ha portato:
+  - con la chiusura in sospeso, un altro bottone sullo stesso messaggio cambia la decisione (il messaggio
+    costruito dal tocco ha `"tocco": True`, e `Chiusure.chiudi` scarta solo lo stesso bottone);
+  - il bot ricorda il messaggio con i bottoni validi (`store.messaggio_con_bottoni`): i bottoni di un
+    «impossibile» superato rispondono «Questi bottoni non valgono più.»;
+  - i bottoni si tolgono in `manda` appena il sondaggio non è più aperto, quindi anche dopo una chiusura in
+    sospeso completata più tardi, e quando una data torna in gioco o arriva un «impossibile» nuovo;
+  - «message is not modified» su `editMessageReplyMarkup` non è un errore;
+  - l'identificativo del sondaggio nel dato del bottone solo con cifre ASCII;
+  - `testi.annunci` senza il sondaggio, per «impossibile», è un errore;
+  - le prove che mancavano: il tocco con la ripresa che aspetta di riaprire, la pausa di un 429, il
+    «Rimanda» vecchio dopo un rimanda scritto, l'argomento vuoto.

@@ -278,3 +278,10 @@ def test_togli_bottoni():
         "message_id": 44,
         "reply_markup": {"inline_keyboard": []},
     }
+
+
+def test_togli_bottoni_gia_tolti_non_e_un_errore():
+    """Due tocchi di fila, o un tocco riletto: i bottoni sono già spariti, e
+    Telegram dice che il messaggio non cambia."""
+    bot = bot_con(lambda r: rifiuto(400, "Bad Request: message is not modified: specified new message content and reply markup are exactly the same"))
+    bot.togli_bottoni(-100, 44)

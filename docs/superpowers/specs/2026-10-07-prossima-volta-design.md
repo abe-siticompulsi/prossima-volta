@@ -192,7 +192,8 @@ stesso giro prima «non più», poi «possibile», poi «quasi», poi «impossib
      nemmeno con tre. Gio, decidi tu:» e il solo bottone «Rimanda alla prossima
      settimana».
    «Gio» è la menzione del master; se il master non ha `chiude = true`, quella
-   di chi ce l'ha. Le date dei bottoni si dicono come nel testo («Tieni lunedì
+   di chi ce l'ha («Abe, decidi tu:», o «Abe e Emi, decidete voi:» se sono più
+   di uno). Le date dei bottoni si dicono come nel testo («Tieni lunedì
    13» se il sondaggio sta su più settimane).
 
 Un annuncio conta come fatto solo dopo che Telegram l'ha accettato; un messaggio
@@ -541,8 +542,8 @@ Abe, in emergenza)» dal roster, come in §3.7.
 Telegram parte senza quello che segue: «/chiudi@<bot> rimanda» chiuderebbe il
 sondaggio senza rimandarlo, e non si torna indietro. Perciò, nei messaggi del
 bot, i comandi con argomenti (in `/aiuto` tutti, nel rifiuto di «con», nei
-«riprovate con:», in «impossibile») hanno un'entità `code`: toccati, si
-copiano interi. Restano evidenziati solo i comandi da soli, senza argomenti (per
+«riprovate con:») hanno un'entità `code`: toccati, si copiano interi.
+«Impossibile» non ha comandi: ha i bottoni (§3.10). Restano evidenziati solo i comandi da soli, senza argomenti (per
 esempio «chiudilo prima con /chiudi@<bot>»).
 
 ### 3.10 I bottoni
@@ -558,11 +559,21 @@ niente nella chat, e il bot riceve un `callback_query`.
 - **Il sondaggio del bottone non è più aperto** (chiuso con `/chiudi`, o con un
   altro bottone): l'avviso «Il sondaggio è già chiuso.», e il bot toglie i
   bottoni dal messaggio.
+- **I bottoni di un «impossibile» superato** (ne è arrivato uno nuovo, o una
+  data è tornata in gioco): l'avviso «Questi bottoni non valgono più.», e il
+  bot li toglie. Valgono solo quelli dell'ultimo «impossibile», che il bot
+  ricorda.
 - **Chi può chiudere, sul sondaggio aperto**: il bot risponde al tocco senza
   testo e fa quello che farebbe `/chiudi 13/10` o `/chiudi rimanda` della
   stessa persona (§3.7), con le risposte allo stesso messaggio «impossibile».
-  Se il sondaggio non è più aperto dopo (chiuso, o rimandato a uno nuovo), il
-  bot toglie i bottoni.
+  Con la chiusura in sospeso, un altro bottone dello stesso messaggio cambia la
+  decisione, come un altro `/chiudi`; lo stesso bottone, toccato o letto di
+  nuovo, non fa niente.
+- **Quando i bottoni spariscono**: appena il sondaggio non è più aperto (chiuso
+  in qualunque modo, anche da una chiusura in sospeso che si completa dopo, o
+  rimandato a uno nuovo), quando una data torna in gioco, e quando arriva un
+  «impossibile» nuovo, che ha i bottoni suoi. Bottoni già tolti non sono un
+  errore (Telegram risponde che il messaggio non cambia).
 - Un tocco riletto dopo un riavvio vale come un `/chiudi` riletto: niente due
   volte. Una risposta al tocco o una rimozione dei bottoni che non riesce (per
   esempio un tocco vecchio, dopo un buio) va solo nel log.

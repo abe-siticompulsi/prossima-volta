@@ -153,11 +153,14 @@ class Invio:
 
     # --- le chiamate che non passano dalla posta
 
-    def scrivi(self, testo: testi.Testo) -> None:
+    def scrivi(self, testo: testi.Testo) -> int:
         """Un messaggio nel gruppo, subito e senza la posta: un errore esce di
         qui, e chi chiama sa se è partito (un annuncio conta come fatto solo
-        dopo che Telegram l'ha accettato)."""
-        self._invia(self._tg.scrivi, self._gruppo, testo.testo, testo.entita, None, testo.bottoni)
+        dopo che Telegram l'ha accettato). Restituisce il suo identificativo."""
+        mandato = self._invia(
+            self._tg.scrivi, self._gruppo, testo.testo, testo.entita, None, testo.bottoni
+        )
+        return mandato["message_id"]
 
     def rispondi_al_tocco(self, tocco_id: str, avviso: str | None = None) -> None:
         """Al meglio: un tocco vecchio (dopo un buio) Telegram non lo accetta più,

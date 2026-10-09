@@ -7,7 +7,10 @@ servizio ritrova quello che è arrivato nel frattempo, e ignora i voti di prova
 (sono di sondaggi che non conosce).
 
 Un test chiede ad Alberto di votare: la domanda del sondaggio dice cosa fare,
-e il test aspetta fino a tre minuti.
+e il test aspetta fino a tre minuti. Un altro gli chiede di toccare un bottone;
+il tocco resta fra gli aggiornamenti non confermati, e alla ripartenza il
+servizio prova a rispondergli: Telegram lo rifiuta perché è vecchio, e nel log
+compare un avviso «risposta al tocco non mandata». È normale.
 """
 
 import os

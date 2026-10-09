@@ -174,11 +174,17 @@ class BotTelegram:
         self._chiama("answerCallbackQuery", corpo, timeout=SCRITTURA)
 
     def togli_bottoni(self, chat_id: int, messaggio: int) -> None:
-        self._chiama(
-            "editMessageReplyMarkup",
-            {"chat_id": chat_id, "message_id": messaggio, "reply_markup": {"inline_keyboard": []}},
-            timeout=SCRITTURA,
-        )
+        """Bottoni già tolti (due tocchi di fila, un tocco riletto): Telegram dice
+        che il messaggio non cambia, e va bene così."""
+        try:
+            self._chiama(
+                "editMessageReplyMarkup",
+                {"chat_id": chat_id, "message_id": messaggio, "reply_markup": {"inline_keyboard": []}},
+                timeout=SCRITTURA,
+            )
+        except TelegramRifiuto as e:
+            if "message is not modified" not in str(e):
+                raise
 
     def ferma_sondaggio(self, chat_id: int, messaggio: int) -> list[int]:
         """Ferma il sondaggio e restituisce i conteggi per opzione, nell'ordine

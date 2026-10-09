@@ -70,6 +70,7 @@ CHIAVE_NON_CONFERMATO = "sondaggio_non_confermato"
 CHIAVE_CHIUSURA = "chiusura_sospesa"
 CHIAVE_SCONOSCIUTI = "sondaggi_sconosciuti_avvisati"
 CHIAVE_RIPRESA = "ripresa"
+CHIAVE_BOTTONI = "messaggio_con_bottoni"
 
 # Le fasi della ripresa dopo il buio (§3.8).
 FERMARE = "fermare"  # lo stop del sondaggio e il confronto dei conteggi
@@ -680,6 +681,22 @@ class Store:
     def scrivi_valore(self, chiave: str, valore: str) -> None:
         with self._connessione() as c:
             _scrivi_valore(c, chiave, valore)
+
+    def messaggio_con_bottoni(self) -> tuple[int, int] | None:
+        """(sondaggio, messaggio) dell'ultimo «impossibile» con i bottoni: i
+        soli che valgono (§3.10)."""
+        salvato = self.leggi_valore(CHIAVE_BOTTONI)
+        if salvato is None:
+            return None
+        sondaggio, messaggio = salvato.split(":")
+        return int(sondaggio), int(messaggio)
+
+    def segna_messaggio_con_bottoni(self, sondaggio_id: int, messaggio: int) -> None:
+        self.scrivi_valore(CHIAVE_BOTTONI, f"{sondaggio_id}:{messaggio}")
+
+    def togli_messaggio_con_bottoni(self) -> None:
+        with self._connessione() as c:
+            _togli_valore(c, CHIAVE_BOTTONI)
 
     def offset(self) -> int | None:
         salvato = self.leggi_valore(CHIAVE_OFFSET)

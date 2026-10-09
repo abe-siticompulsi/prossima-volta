@@ -93,9 +93,12 @@ class Chiusure:
 
     def chiudi(self, messaggio: dict, parole: list[str]) -> None:
         comando = messaggio["message_id"]
+        # un tocco su un bottone (§3.10): il «comando» è il messaggio con i
+        # bottoni, e un altro bottone dello stesso messaggio è un'altra decisione
+        tocco = messaggio.get("tocco", False)
         sospesa = self._store.chiusura_sospesa()
         if self._store.chiuso_dal_comando(comando) or (
-            sospesa is not None and sospesa.comando == comando
+            sospesa is not None and sospesa.comando == comando and not tocco
         ):
             return  # lo stesso /chiudi letto una seconda volta dopo un riavvio
         chi = self._roster.per_id(messaggio.get("from", {}).get("id"))
@@ -129,6 +132,8 @@ class Chiusure:
                 return
             argomento = tenuta.isoformat()
         chiusura = ChiusuraSospesa(sondaggio.id, comando, argomento)
+        if tocco and sospesa == chiusura:
+            return  # lo stesso bottone toccato, o letto, una seconda volta
         if sondaggio.chiuso_alle is not None:
             # già fermo su Telegram: si chiude con i voti tenuti, senza stop, e la
             # ripresa finisce nella stessa transazione della lettera
