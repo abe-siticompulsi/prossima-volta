@@ -82,7 +82,7 @@ def test_fuori_dal_gruppo_non_risponde_a_niente(bot, telegram, store):
 
 
 def test_un_messaggio_che_non_e_un_comando_si_ignora(bot, telegram):
-    bot.ricevi([comando("ciao"), comando(""), comando("/aiuto")])
+    bot.ricevi([comando("ciao"), comando(""), comando("/start")])
     assert telegram.chiamate == []
 
 
@@ -812,3 +812,20 @@ def test_un_voto_che_cambia_due_date_fa_un_messaggio(bot, telegram):
     vota(bot, telegram, SEM, "nessuna")
     assert telegram.scritti()[-1] == "Lunedì e martedì sono saltati, Sem non può più."
     assert len(telegram.scritti()) == 3
+
+
+def test_aiuto(bot, telegram):
+    aiuto = comando("/aiuto@ProssimaVoltaBot")
+    bot.ricevi([aiuto])
+    assert telegram.scritti() == [
+        "Come si usa:\n"
+        "/sondaggio@ProssimaVoltaBot — sondaggio sulla settimana prossima, sabato escluso\n"
+        "/sondaggio@ProssimaVoltaBot con sabato — anche il sabato\n"
+        "/sondaggio@ProssimaVoltaBot mar gio — solo quei giorni\n"
+        "/sondaggio@ProssimaVoltaBot 14/10 16/10 — quelle date\n"
+        "Chiude Gio (o Abe, in emergenza):\n"
+        "/chiudi@ProssimaVoltaBot — chiude e dice le date possibili\n"
+        "/chiudi@ProssimaVoltaBot 14/10 (o mar) — chiude e tiene quella data\n"
+        "/chiudi@ProssimaVoltaBot rimanda — chiude e rifà il sondaggio sulla settimana dopo"
+    ]
+    assert telegram.di_tipo("scrivi")[0]["risposta_a"] == aiuto["message"]["message_id"]

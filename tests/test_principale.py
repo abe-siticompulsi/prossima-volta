@@ -141,7 +141,13 @@ def test_all_avvio_chiede_il_nome_e_registra_i_comandi(tmp_path):
     principale.avvia(ambiente(tmp_path), telegram=telegram, fermo=fermo)
     assert telegram.di_tipo("io") == [{}]
     assert telegram.di_tipo("registra_comandi") == [
-        {"comandi": [("sondaggio", "Sondaggio per la prossima volta"), ("chiudi", "Chiude il sondaggio")]}
+        {
+            "comandi": [
+                ("sondaggio", "Sondaggio per la prossima volta"),
+                ("chiudi", "Chiude il sondaggio"),
+                ("aiuto", "Come si usano i comandi"),
+            ]
+        }
     ]
     assert (tmp_path / "prossima.sqlite").exists()
 

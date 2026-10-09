@@ -47,7 +47,11 @@ from .telegram import MASSIMO_AGGIORNAMENTI, TelegramError, TelegramRifiuto
 
 log = logging.getLogger(__name__)
 
-COMANDI = (("sondaggio", "Sondaggio per la prossima volta"), ("chiudi", "Chiude il sondaggio"))
+COMANDI = (
+    ("sondaggio", "Sondaggio per la prossima volta"),
+    ("chiudi", "Chiude il sondaggio"),
+    ("aiuto", "Come si usano i comandi"),
+)
 # Gli annunci aspettano che i voti si assestino (spec §3.5).
 ATTESA_ANNUNCI = timedelta(minutes=2)
 # Un voto per un sondaggio sconosciuto si dice nel gruppo solo se un sondaggio
@@ -184,6 +188,11 @@ class Bot:
             self._sondaggio(messaggio, parole[1:])
         elif comando == "chiudi":
             self._chiusure.chiudi(messaggio, parole[1:])
+        elif comando == "aiuto":
+            self._invio.accoda(
+                testi.aiuto(self._nome, self._roster, self._giorni),
+                risposta_a=messaggio["message_id"],
+            )
 
     def _comando(self, parola: str) -> str | None:
         """«/sondaggio» o «/sondaggio@<nome del bot>» → «sondaggio»; un comando

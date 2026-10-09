@@ -242,6 +242,39 @@ def _impossibile(
     return s.fatto()
 
 
+# --- le istruzioni (§3.9)
+
+
+def aiuto(nome_bot: str, roster: regole.Roster, giorni_di_sempre: Collection[int]) -> Testo:
+    """Le istruzioni di `/aiuto`: i giorni fuori e chi chiude vengono dalla
+    configurazione (`PV_GIORNI` e il roster)."""
+    sondaggio, chiudi = f"/sondaggio@{nome_bot}", f"/chiudi@{nome_bot}"
+    fuori = [g for g in range(7) if g not in giorni_di_sempre]
+    righe = ["Come si usa:"]
+    if fuori:
+        nomi = [regole.GIORNI_INTERI[g] for g in fuori]
+        if len(fuori) > 1:
+            esclusi = "esclusi"
+        else:
+            esclusi = "esclusa" if fuori[0] == 6 else "escluso"  # la domenica
+        articolo = "la" if fuori[0] == 6 else "il"
+        righe += [
+            f"{sondaggio} — sondaggio sulla settimana prossima, {elenco(nomi)} {esclusi}",
+            f"{sondaggio} con {nomi[0]} — anche {articolo} {nomi[0]}",
+        ]
+    else:
+        righe.append(f"{sondaggio} — sondaggio sulla settimana prossima")
+    righe += [
+        f"{sondaggio} mar gio — solo quei giorni",
+        f"{sondaggio} 14/10 16/10 — quelle date",
+        f"{_maiuscola(chi_chiude(roster))}:",
+        f"{chiudi} — chiude e dice le date possibili",
+        f"{chiudi} 14/10 (o mar) — chiude e tiene quella data",
+        f"{chiudi} rimanda — chiude e rifà il sondaggio sulla settimana dopo",
+    ]
+    return Testo("\n".join(righe))
+
+
 # --- le risposte ai comandi
 
 

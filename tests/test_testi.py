@@ -379,3 +379,20 @@ def test_le_date_dette():
     assert testi.giorno_detto(d("14/10"), False) == "martedì 14"
     assert testi.date_dette([d("16/10"), d("13/10")], True) == "lunedì e giovedì"
     assert testi.date_dette([d("13/10"), d("14/10"), d("16/10")], False) == "lunedì 13, martedì 14 e giovedì 16"
+
+
+def test_aiuto_dai_giorni_di_sempre():
+    tutti = testi.aiuto(NOME, ROSTER, range(7)).testo.split("\n")
+    assert tutti[1] == f"/sondaggio@{NOME} — sondaggio sulla settimana prossima"
+    assert not any(" con " in riga for riga in tutti)
+    senza_domenica = testi.aiuto(NOME, ROSTER, (0, 1, 2, 3, 4, 5)).testo.split("\n")
+    assert senza_domenica[1].endswith("— sondaggio sulla settimana prossima, domenica esclusa")
+    assert senza_domenica[2] == f"/sondaggio@{NOME} con domenica — anche la domenica"
+    senza_due = testi.aiuto(NOME, ROSTER, (0, 1, 2, 3, 4)).testo.split("\n")
+    assert senza_due[1].endswith("— sondaggio sulla settimana prossima, sabato e domenica esclusi")
+    assert senza_due[2] == f"/sondaggio@{NOME} con sabato — anche il sabato"
+
+
+def test_aiuto_dal_roster():
+    solo_gio = Roster((GIO, replace(ABE, chiude=False), EMI, SEM, SESE, PIPPO))
+    assert "\nChiude Gio:\n" in testi.aiuto(NOME, solo_gio, (0, 1, 2, 3, 4, 6)).testo
