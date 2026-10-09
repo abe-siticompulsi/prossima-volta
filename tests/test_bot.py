@@ -12,7 +12,7 @@ from tests.finti import telegram_guasto
 from tests.tavolo import ABE, EMI, ESTRANEO, GIO, PIPPO, SEM, SESE, d
 
 FRASE = testi.FRASI_NESSUNA[0]  # `caso` sceglie la prima restante
-SETTIMANA = ["lun 13/10", "mar 14/10", "mer 15/10", "gio 16/10", "ven 17/10", "sab 18/10", "dom 19/10"]
+SETTIMANA = ["lun 13/10", "mar 14/10", "mer 15/10", "gio 16/10", "ven 17/10", "dom 19/10"]
 NON_CONFERMATO = "Telegram non ha confermato il sondaggio: se non lo vedete, riprovate con:\n"
 SCONOSCIUTO = (
     "Ho ricevuto un voto per un sondaggio che non conosco: "
@@ -45,7 +45,7 @@ def test_senza_parole_la_settimana_seguente(bot, telegram, store, orologio):
         {"chat_id": GRUPPO, "domanda": "Prossima volta?", "opzioni": [*SETTIMANA, FRASE]}
     ]
     aperto = store.sondaggio_aperto()
-    assert aperto.date == tuple(d(f"{g}/10") for g in range(13, 20))
+    assert aperto.date == tuple(d(f"{g}/10") for g in (13, 14, 15, 16, 17, 19))
     assert (aperto.poll_id, aperto.messaggio) == (
         telegram.ultimo_sondaggio["poll_id"],
         telegram.ultimo_sondaggio["messaggio"],
@@ -191,6 +191,26 @@ def test_le_frasi_della_configurazione(riavvia, telegram, store):
     # finite le due, si ricomincia
     assert [s["opzioni"][-1] for s in telegram.sondaggi] == ["Nessuna: uno", "Nessuna: due", "Nessuna: uno"]
     assert store.frasi_usate() == {"Nessuna: uno"}
+
+
+def test_con_sabato(bot, telegram):
+    bot.ricevi([comando("/sondaggio con sabato")])
+    assert telegram.ultimo_sondaggio["opzioni"][:-1] == [
+        "lun 13/10", "mar 14/10", "mer 15/10", "gio 16/10", "ven 17/10", "sab 18/10", "dom 19/10"
+    ]
+
+
+def test_con_usato_male_risponde_come_si_scrive(bot, telegram):
+    bot.ricevi([comando("/sondaggio mar con sab")])
+    assert telegram.scritti() == [
+        "Per aggiungere un giorno a quelli di sempre: /sondaggio@ProssimaVoltaBot con sabato."
+    ]
+    assert telegram.di_tipo("manda_sondaggio") == []
+
+
+def test_i_giorni_di_sempre_dalla_configurazione(riavvia, telegram):
+    riavvia(giorni=(1, 3)).ricevi([comando("/sondaggio")])
+    assert telegram.ultimo_sondaggio["opzioni"][:-1] == ["mar 14/10", "gio 16/10"]
 
 
 def test_la_domanda_della_configurazione(riavvia, telegram):

@@ -17,7 +17,7 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import config, sblocco
+from . import config, regole, sblocco
 from .bot import COMANDI, Bot
 from .store import Store
 from .telegram import BotTelegram, TelegramError, TelegramTroppeRichieste
@@ -144,14 +144,17 @@ def avvia(env: Mapping[str, str], *, telegram=None, fermo: threading.Event | Non
         adesso=lambda: datetime.now(UTC),
         frasi=imp.frasi,
         domanda=imp.domanda,
+        giorni=imp.giorni,
     )
     log.info(
-        "Prossima volta: @%s nel gruppo %s, %d persone nel roster, frasi di «Nessuna»: %d, domanda «%s»",
+        "Prossima volta: @%s nel gruppo %s, %d persone nel roster, frasi di «Nessuna»: %d, "
+        "domanda «%s», giorni di sempre: %s",
         nome,
         imp.gruppo,
         len(imp.roster.persone),
         len(imp.frasi),
         imp.domanda,
+        " ".join(regole.GIORNI[g] for g in imp.giorni),
     )
     ciclo(telegram, bot, store, imp.battito, fermo or threading.Event())
 

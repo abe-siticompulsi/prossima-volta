@@ -149,10 +149,14 @@ def test_annuncio_sceglie_il_testo_e_menziona_chi_chiude_dal_roster():
         (regole.DataPassata("3/10"), "La data 3/10 è già passata."),
         (regole.DataTroppoLontana("14/10/2052"), "La data 14/10/2052 è troppo lontana."),
         (regole.TroppeDate(), "Troppe date: al massimo 10."),
+        (
+            regole.ConSbagliato(),
+            "Per aggiungere un giorno a quelli di sempre: /sondaggio@ProssimaVoltaBot con sabato.",
+        ),
     ],
 )
 def test_i_rifiuti(rifiuto, testo):
-    assert testi.rifiuto(rifiuto) == testi.Testo(testo)
+    assert testi.rifiuto(rifiuto, "ProssimaVoltaBot") == testi.Testo(testo)
 
 
 @pytest.mark.parametrize(

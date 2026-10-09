@@ -180,7 +180,7 @@ def annuncio(a: regole.Annuncio, roster: regole.Roster, nome_bot: str) -> Testo:
 # --- le risposte ai comandi
 
 
-def rifiuto(r: regole.Rifiuto) -> Testo:
+def rifiuto(r: regole.Rifiuto, nome_bot: str) -> Testo:
     """I rifiuti di `/sondaggio`."""
     match r:
         case regole.NonCapisco():
@@ -193,6 +193,10 @@ def rifiuto(r: regole.Rifiuto) -> Testo:
             return Testo(f"La data {r.scritta} è troppo lontana.")
         case regole.TroppeDate():
             return Testo(f"Troppe date: al massimo {regole.MASSIMO_DATE}.")
+        case regole.ConSbagliato():
+            return Testo(
+                f"Per aggiungere un giorno a quelli di sempre: /sondaggio@{nome_bot} con sabato."
+            )
     raise TypeError(f"rifiuto sconosciuto: {r!r}")
 
 

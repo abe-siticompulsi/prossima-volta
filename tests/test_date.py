@@ -25,8 +25,41 @@ def test_ogni_giorno_ha_il_suo_nome():
     ]
 
 
-def test_senza_parole_i_sette_giorni_della_settimana_seguente():
-    assert regole.date_del_comando([], OGGI) == [d("13/10") + timedelta(days=i) for i in range(7)]
+def test_senza_parole_i_giorni_di_sempre_senza_il_sabato():
+    assert regole.date_del_comando([], OGGI) == [
+        d(g) for g in ("13/10", "14/10", "15/10", "16/10", "17/10", "19/10")
+    ]
+
+
+def test_i_giorni_di_sempre_si_scelgono():
+    assert regole.date_del_comando([], OGGI, (1, 0)) == [d("13/10"), d("14/10")]
+
+
+@pytest.mark.parametrize("parole", [["con", "sabato"], ["con", "sab"], ["CON", "Sabato"]])
+def test_con_aggiunge_un_giorno_a_quelli_di_sempre(parole):
+    assert regole.date_del_comando(parole, OGGI) == [d("13/10") + timedelta(days=i) for i in range(7)]
+
+
+def test_con_un_giorno_che_c_e_gia_non_cambia_niente():
+    assert regole.date_del_comando(["con", "dom"], OGGI) == regole.date_del_comando([], OGGI)
+
+
+@pytest.mark.parametrize(
+    "parole", [["con"], ["con", "14/10"], ["con", "xyz"], ["mar", "con", "sab"], ["con", "sab", "con"]]
+)
+def test_con_usato_male(parole):
+    with pytest.raises(regole.ConSbagliato):
+        regole.date_del_comando(parole, OGGI)
+
+
+@pytest.mark.parametrize("scritta", ["martedì", "martedi", "Martedì", "MARTEDI", "mar"])
+def test_i_giorni_per_intero(scritta):
+    assert regole.date_del_comando([scritta], OGGI) == [d("14/10")]
+
+
+@pytest.mark.parametrize("scritta", ["martedì", "Martedi", "mar"])
+def test_chiudere_con_il_giorno_per_intero(scritta):
+    assert regole.data_da_chiudere(scritta, [d("14/10"), d("16/10")], OGGI) == d("14/10")
 
 
 @pytest.mark.parametrize(
@@ -39,7 +72,7 @@ def test_senza_parole_i_sette_giorni_della_settimana_seguente():
     ],
 )
 def test_la_settimana_seguente(oggi, lunedi):
-    date_ = regole.date_del_comando([], oggi)
+    date_ = regole.date_del_comando([], oggi, range(7))
     assert date_ == [lunedi + timedelta(days=i) for i in range(7)]
 
 
@@ -90,7 +123,7 @@ def test_oggi_non_e_passata():
 
 
 @pytest.mark.parametrize(
-    "parola", ["32/10", "31/11", "14-10", "domani", "14/10/25", "1/2/3/4", "lunedì", "29/2/2026"]
+    "parola", ["32/10", "31/11", "14-10", "domani", "14/10/25", "1/2/3/4", "lunedìì", "29/2/2026"]
 )
 def test_una_parola_non_capita(parola):
     with pytest.raises(regole.NonCapisco) as rifiuto:
@@ -246,6 +279,7 @@ def test_il_lunedi_della_settimana():
 def test_rimandare_tiene_i_giorni_della_settimana_nella_settimana_dopo():
     assert regole.date_rimandate([d("14/10"), d("16/10")]) == [d("21/10"), d("23/10")]
     settimana = regole.date_del_comando([], OGGI)
-    assert regole.date_rimandate(settimana) == [d("20/10") + timedelta(days=i) for i in range(7)]
+    # senza il sabato, come la settimana di partenza
+    assert regole.date_rimandate(settimana) == [d(g) for g in ("20/10", "21/10", "22/10", "23/10", "24/10", "26/10")]
     # su due settimane: la settimana dopo quella dell'ultima data
     assert regole.date_rimandate([d("14/10"), d("23/10")]) == [d("28/10"), d("30/10")]

@@ -17,6 +17,16 @@ from datetime import date, datetime, timedelta
 
 GIORNI = ("lun", "mar", "mer", "gio", "ven", "sab", "dom")
 GIORNI_INTERI = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica")
+# I giorni di sempre di `/sondaggio`: tutti tranne il sabato, che per la maggior
+# parte delle settimane non va bene a nessuno (`PV_GIORNI` li cambia).
+GIORNI_DI_SEMPRE = (0, 1, 2, 3, 4, 6)
+CON = "con"
+# «mar», «martedì» e «martedi»: come lo scrive chi usa il telefono.
+_NOMI_DEI_GIORNI = {
+    **{g: i for i, g in enumerate(GIORNI)},
+    **{g: i for i, g in enumerate(GIORNI_INTERI)},
+    **{g.replace("ì", "i"): i for i, g in enumerate(GIORNI_INTERI)},
+}
 MASSIMO_DATE = 10
 RIMANDA = "rimanda"
 
@@ -53,6 +63,10 @@ class TroppeDate(Rifiuto):
     pass
 
 
+class ConSbagliato(Rifiuto):
+    """«con» non per primo, da solo, o seguito da qualcosa che non è un giorno."""
+
+
 class NonNelSondaggio(Rifiuto):
     def __init__(self, scritta: str) -> None:
         super().__init__(scritta)
@@ -74,6 +88,12 @@ class GiornoAmbiguo(Rifiuto):
         super().__init__(giorno, prima_data)
         self.giorno = giorno  # come `date.weekday()`: lunedì 0
         self.prima_data = prima_data  # la prima del sondaggio con quel giorno
+
+
+def giorno_della_parola(parola: str) -> int | None:
+    """Il giorno della settimana di una parola («mar», «Martedì», «martedi» →
+    1), o None se la parola non è un giorno."""
+    return _NOMI_DEI_GIORNI.get(parola.lower())
 
 
 def breve(giorno: date) -> str:
@@ -144,9 +164,9 @@ def _data_senza_anno(giorno: int, mese: int, oggi: date) -> date | None:
 
 
 def _data_della_parola(parola: str, oggi: date) -> date:
-    minuscola = parola.lower()
-    if minuscola in GIORNI:
-        return lunedi_seguente(oggi) + timedelta(days=GIORNI.index(minuscola))
+    settimanale = giorno_della_parola(parola)
+    if settimanale is not None:
+        return lunedi_seguente(oggi) + timedelta(days=settimanale)
     trovata = _DATA.fullmatch(parola)
     if trovata is None:
         raise NonCapisco(parola)
@@ -167,14 +187,25 @@ def _data_della_parola(parola: str, oggi: date) -> date:
     return giorno
 
 
-def date_del_comando(parole: Sequence[str], oggi: date) -> list[date]:
-    """Le date di `/sondaggio`. Senza parole, i sette giorni della settimana
-    seguente; con giorni (`lun` … `dom`) quei giorni della settimana seguente;
-    con date, quelle date. Giorni e date si mescolano; il risultato è ordinato,
+def date_del_comando(
+    parole: Sequence[str], oggi: date, giorni_di_sempre: Iterable[int] = GIORNI_DI_SEMPRE
+) -> list[date]:
+    """Le date di `/sondaggio`. Senza parole, i giorni di sempre della settimana
+    seguente; con «con» e dei giorni, quei giorni più quelli di sempre; con
+    giorni (abbreviati o per intero) quei giorni della settimana seguente; con
+    date, quelle date. Giorni e date si mescolano; il risultato è ordinato,
     senza doppioni. La prima parola che non va ferma tutto."""
+    lunedi = lunedi_seguente(oggi)
     if not parole:
-        lunedi = lunedi_seguente(oggi)
-        return [lunedi + timedelta(days=i) for i in range(7)]
+        return [lunedi + timedelta(days=g) for g in sorted(set(giorni_di_sempre))]
+    if parole[0].lower() == CON:
+        aggiunti = [giorno_della_parola(p) for p in parole[1:]]
+        if not aggiunti or None in aggiunti:
+            raise ConSbagliato()
+        giorni = set(giorni_di_sempre) | {g for g in aggiunti if g is not None}
+        return [lunedi + timedelta(days=g) for g in sorted(giorni)]
+    if any(p.lower() == CON for p in parole):
+        raise ConSbagliato()
     scelte = {_data_della_parola(parola, oggi) for parola in parole}
     if len(scelte) > MASSIMO_DATE:
         raise TroppeDate()
@@ -189,15 +220,14 @@ def data_da_chiudere(parola: str, date_sondaggio: Sequence[date], oggi: date) ->
     data passata: il giorno si risolve come se contassero tutte, e chi chiama
     rifiuta la data restituita perché è già passata. Una data scritta per
     intero si restituisce com'è, passata o no."""
-    minuscola = parola.lower()
-    if minuscola in GIORNI:
-        giorno = GIORNI.index(minuscola)
-        trovate = sorted(d for d in date_sondaggio if d.weekday() == giorno)
+    settimanale = giorno_della_parola(parola)
+    if settimanale is not None:
+        trovate = sorted(d for d in date_sondaggio if d.weekday() == settimanale)
         if not trovate:
-            raise GiornoAssente(giorno)
+            raise GiornoAssente(settimanale)
         contano = [d for d in trovate if d >= oggi] or trovate
         if len(contano) > 1:
-            raise GiornoAmbiguo(giorno, contano[0])
+            raise GiornoAmbiguo(settimanale, contano[0])
         return contano[0]
     trovata = _DATA.fullmatch(parola)
     if trovata is None:

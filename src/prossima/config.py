@@ -5,9 +5,9 @@ Sul server stanno in `config/prossima.env` (permessi 600), in
 queste»; nel repository ci sono solo gli esempi di `config.esempio/`, con
 identificativi finti. Un valore mancante o sbagliato ferma l'avvio con un
 messaggio che dice quale: mai un default silenzioso per un segreto, per il
-gruppo o per una persona. Le frasi e la domanda del sondaggio hanno un default:
-senza `PV_FRASI`, quelle di `testi.FRASI_NESSUNA`; senza `PV_DOMANDA`,
-`testi.DOMANDA`.
+gruppo o per una persona. Le frasi, la domanda e i giorni di sempre del
+sondaggio hanno un default: senza `PV_FRASI`, quelle di `testi.FRASI_NESSUNA`;
+senza `PV_DOMANDA`, `testi.DOMANDA`; senza `PV_GIORNI`, `regole.GIORNI_DI_SEMPRE`.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .regole import MASTER, RUOLI, Persona, Roster
+from .regole import GIORNI_DI_SEMPRE, MASTER, RUOLI, Persona, Roster, giorno_della_parola
 from .testi import DOMANDA, FRASI_NESSUNA, LUNGHEZZA_DOMANDA, LUNGHEZZA_OPZIONE, utf16
 
 FUSO_PREDEFINITO = "Europe/Zurich"
@@ -42,6 +42,7 @@ class Impostazioni:
     fuso: ZoneInfo
     frasi: tuple[str, ...]
     domanda: str
+    giorni: tuple[int, ...]
 
 
 def _testo(env: Mapping[str, str], nome: str) -> str:
@@ -202,6 +203,21 @@ def _domanda(env: Mapping[str, str]) -> str:
     return domanda
 
 
+def _giorni(env: Mapping[str, str]) -> tuple[int, ...]:
+    """I giorni di sempre di `/sondaggio`, o quelli predefiniti. Il messaggio
+    d'errore non ripete il valore, come per le altre variabili."""
+    parole = (env.get("PV_GIORNI") or "").split()
+    if not parole:
+        return GIORNI_DI_SEMPRE
+    giorni = [giorno_della_parola(p) for p in parole]
+    if None in giorni:
+        raise ConfigurazioneErrata(
+            "PV_GIORNI: i giorni si scrivono lun mar mer gio ven sab dom (o per intero), "
+            "separati da spazi"
+        )
+    return tuple(sorted({g for g in giorni if g is not None}))
+
+
 def da_ambiente(env: Mapping[str, str]) -> Impostazioni:
     return Impostazioni(
         token_bot=_testo(env, "PV_BOT_TOKEN"),
@@ -212,4 +228,5 @@ def da_ambiente(env: Mapping[str, str]) -> Impostazioni:
         fuso=_fuso(env),
         frasi=frasi_da_ambiente(env),
         domanda=_domanda(env),
+        giorni=_giorni(env),
     )

@@ -67,12 +67,14 @@ class Bot:
         caso: Callable[[Sequence[str]], str] = random.choice,
         frasi: Sequence[str] = testi.FRASI_NESSUNA,
         domanda: str = testi.DOMANDA,
+        giorni: Sequence[int] = regole.GIORNI_DI_SEMPRE,
     ) -> None:
         self._store = store
         self._roster = roster
         self._gruppo = gruppo
         self._nome = nome
         self._fuso = fuso
+        self._giorni = tuple(giorni)
         self._adesso = adesso
         self._invio = Invio(
             telegram=telegram,
@@ -206,9 +208,9 @@ class Bot:
             self._invio.accoda(testi.gia_aperto(self._nome), risposta_a=aperto.messaggio)
             return
         try:
-            date_ = regole.date_del_comando(parole, self._oggi())
+            date_ = regole.date_del_comando(parole, self._oggi(), self._giorni)
         except regole.Rifiuto as r:
-            self._invio.accoda(testi.rifiuto(r), risposta_a=messaggio["message_id"])
+            self._invio.accoda(testi.rifiuto(r, self._nome), risposta_a=messaggio["message_id"])
             return
         try:
             mandato, frase = self._invio.nuovo_sondaggio(date_)

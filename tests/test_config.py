@@ -95,6 +95,7 @@ def test_le_impostazioni_dall_ambiente(tmp_path):
         fuso=ZoneInfo("Europe/Zurich"),
         frasi=testi.FRASI_NESSUNA,
         domanda=testi.DOMANDA,
+        giorni=(0, 1, 2, 3, 4, 6),
     )
 
 
@@ -259,3 +260,18 @@ def test_una_domanda_oltre_300_caratteri(tmp_path):
     with pytest.raises(ConfigurazioneErrata, match="PV_DOMANDA: la domanda è lunga 301 caratteri, il massimo è 300") as errore:
         config.da_ambiente(ambiente(tmp_path, PV_DOMANDA="x" * 299 + "🎲"))
     assert "xxx" not in str(errore.value)
+
+
+def test_senza_pv_giorni_tutti_tranne_il_sabato(tmp_path):
+    assert config.da_ambiente(ambiente(tmp_path)).giorni == (0, 1, 2, 3, 4, 6)
+    assert config.da_ambiente(ambiente(tmp_path, PV_GIORNI="  ")).giorni == (0, 1, 2, 3, 4, 6)
+
+
+def test_i_giorni_da_pv_giorni(tmp_path):
+    assert config.da_ambiente(ambiente(tmp_path, PV_GIORNI="ven lun  mercoledì lun")).giorni == (0, 2, 4)
+
+
+def test_un_giorno_sconosciuto_in_pv_giorni(tmp_path):
+    with pytest.raises(ConfigurazioneErrata, match="PV_GIORNI: i giorni si scrivono") as errore:
+        config.da_ambiente(ambiente(tmp_path, PV_GIORNI="lun SEGRETO"))
+    assert "SEGRETO" not in str(errore.value)
