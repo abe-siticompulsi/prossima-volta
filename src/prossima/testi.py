@@ -89,6 +89,13 @@ class _Scrittura:
             self.menzione(persona)
         return self
 
+    def codice(self, pezzo: str) -> _Scrittura:
+        """Un comando da copiare. Toccato, un comando evidenziato parte senza
+        quello che segue («/chiudi@bot rimanda» chiuderebbe e basta); il codice
+        invece, toccato, si copia intero."""
+        self._entita.append({"type": "code", "offset": self._lunghezza, "length": utf16(pezzo)})
+        return self.testo(pezzo)
+
     def fatto(self) -> Testo:
         return Testo("".join(self._pezzi), tuple(self._entita))
 
@@ -224,7 +231,7 @@ def _impossibile(
 ) -> Testo:
     """Menziona il master, che decide; se il master non può chiudere, chi può."""
     chi = (roster.master,) if roster.master.chiude else roster.chi_chiude
-    rimanda = f"/chiudi@{nome_bot} rimanda per rimandare alla prossima settimana."
+    chiudi = f"/chiudi@{nome_bot}"
     s = _Scrittura()
     if a.con_tre:
         giorni = [g for g, _ in a.con_tre]
@@ -233,12 +240,12 @@ def _impossibile(
             "😬 Con i voti attuali non ci sono date con quattro giocatori. "
             f"Con tre: {date_dette(giorni, solo_il_giorno)}. "
         )
-        s.menzioni(chi, " e ").testo(
-            f": /chiudi@{nome_bot} {regole.breve(giorni[0])} {tenere}, {rimanda}"
-        )
+        s.menzioni(chi, " e ").testo(": ").codice(f"{chiudi} {regole.breve(giorni[0])}")
+        s.testo(f" {tenere}, ")
     else:
         s.testo("😬 Con i voti attuali non ci sono date con quattro giocatori, e nemmeno con tre. ")
-        s.menzioni(chi, " e ").testo(f": {rimanda}")
+        s.menzioni(chi, " e ").testo(": ")
+    s.codice(f"{chiudi} rimanda").testo(" per rimandare alla prossima settimana.")
     return s.fatto()
 
 
@@ -247,10 +254,15 @@ def _impossibile(
 
 def aiuto(nome_bot: str, roster: regole.Roster, giorni_di_sempre: Collection[int]) -> Testo:
     """Le istruzioni di `/aiuto`: i giorni fuori e chi chiude vengono dalla
-    configurazione (`PV_GIORNI` e il roster)."""
+    configurazione (`PV_GIORNI` e il roster). Tutti i comandi sono codice: un
+    tocco li copia, e nessuno parte per sbaglio leggendo le istruzioni."""
     sondaggio, chiudi = f"/sondaggio@{nome_bot}", f"/chiudi@{nome_bot}"
     fuori = [g for g in range(7) if g not in giorni_di_sempre]
-    righe = ["Come si usa:"]
+    s = _Scrittura().testo("Come si usa:")
+
+    def riga(comando: str, resto: str) -> None:
+        s.testo("\n").codice(comando).testo(resto)
+
     if fuori:
         nomi = [regole.GIORNI_INTERI[g] for g in fuori]
         if len(fuori) > 1:
@@ -258,21 +270,17 @@ def aiuto(nome_bot: str, roster: regole.Roster, giorni_di_sempre: Collection[int
         else:
             esclusi = "esclusa" if fuori[0] == 6 else "escluso"  # la domenica
         articolo = "la" if fuori[0] == 6 else "il"
-        righe += [
-            f"{sondaggio} — sondaggio sulla settimana prossima, {elenco(nomi)} {esclusi}",
-            f"{sondaggio} con {nomi[0]} — anche {articolo} {nomi[0]}",
-        ]
+        riga(sondaggio, f" — sondaggio sulla settimana prossima, {elenco(nomi)} {esclusi}")
+        riga(f"{sondaggio} con {nomi[0]}", f" — anche {articolo} {nomi[0]}")
     else:
-        righe.append(f"{sondaggio} — sondaggio sulla settimana prossima")
-    righe += [
-        f"{sondaggio} mar gio — solo quei giorni",
-        f"{sondaggio} 14/10 16/10 — quelle date",
-        f"{_maiuscola(chi_chiude(roster))}:",
-        f"{chiudi} — chiude e dice le date possibili",
-        f"{chiudi} 14/10 (o mar) — chiude e tiene quella data",
-        f"{chiudi} rimanda — chiude e rifà il sondaggio sulla settimana dopo",
-    ]
-    return Testo("\n".join(righe))
+        riga(sondaggio, " — sondaggio sulla settimana prossima")
+    riga(f"{sondaggio} mar gio", " — solo quei giorni")
+    riga(f"{sondaggio} 14/10 16/10", " — quelle date")
+    s.testo(f"\n{_maiuscola(chi_chiude(roster))}:")
+    riga(chiudi, " — chiude e dice le date possibili")
+    riga(f"{chiudi} 14/10", " (o mar) — chiude e tiene quella data")
+    riga(f"{chiudi} rimanda", " — chiude e rifà il sondaggio sulla settimana dopo")
+    return s.fatto()
 
 
 # --- le risposte ai comandi
@@ -297,8 +305,12 @@ def rifiuto(
         case regole.ConSbagliato():
             fuori = [g for g in range(7) if g not in giorni_di_sempre]
             esempio = regole.GIORNI_INTERI[fuori[0] if fuori else 5]
-            return Testo(
-                f"Per aggiungere un giorno a quelli di sempre: /sondaggio@{nome_bot} con {esempio}."
+            return (
+                _Scrittura()
+                .testo("Per aggiungere un giorno a quelli di sempre: ")
+                .codice(f"/sondaggio@{nome_bot} con {esempio}")
+                .testo(".")
+                .fatto()
             )
     raise TypeError(f"rifiuto sconosciuto: {r!r}")
 
@@ -342,9 +354,11 @@ def _riga_di_comando(comando: str, argomenti: Sequence[str]) -> str:
 
 def sondaggio_non_confermato(nome_bot: str, argomenti: Sequence[str]) -> Testo:
     """`argomenti`: quelli del comando, come li ha scritti chi l'ha lanciato."""
-    return Testo(
-        "Telegram non ha confermato il sondaggio: se non lo vedete, riprovate con:\n"
-        + _riga_di_comando(f"/sondaggio@{nome_bot}", argomenti)
+    return (
+        _Scrittura()
+        .testo("Telegram non ha confermato il sondaggio: se non lo vedete, riprovate con:\n")
+        .codice(_riga_di_comando(f"/sondaggio@{nome_bot}", argomenti))
+        .fatto()
     )
 
 
@@ -359,10 +373,11 @@ def voto_sconosciuto(
     )
     if con_sondaggio_aperto:
         return Testo(inizio + "Il sondaggio che conto è questo: votate qui.")
-    return Testo(
-        inizio
-        + "Rilanciatelo e votate lì:\n"
-        + _riga_di_comando(f"/sondaggio@{nome_bot}", argomenti)
+    return (
+        _Scrittura()
+        .testo(inizio + "Rilanciatelo e votate lì:\n")
+        .codice(_riga_di_comando(f"/sondaggio@{nome_bot}", argomenti))
+        .fatto()
     )
 
 
@@ -398,10 +413,14 @@ def rimandiamo(lunedi: date) -> Testo:
 
 def rimando_non_confermato(nome_bot: str, date_: Sequence[date]) -> Testo:
     """Le date sono quelle del sondaggio nuovo, `g/m`: il comando da copiare."""
-    return Testo(
-        "🔒 Sondaggio chiuso. Telegram non ha confermato il sondaggio nuovo: "
-        "se non lo vedete, lanciatelo con:\n"
-        + _riga_di_comando(f"/sondaggio@{nome_bot}", [regole.breve(g) for g in date_])
+    return (
+        _Scrittura()
+        .testo(
+            "🔒 Sondaggio chiuso. Telegram non ha confermato il sondaggio nuovo: "
+            "se non lo vedete, lanciatelo con:\n"
+        )
+        .codice(_riga_di_comando(f"/sondaggio@{nome_bot}", [regole.breve(g) for g in date_]))
+        .fatto()
     )
 
 
@@ -422,9 +441,14 @@ def non_ancora_chiuso() -> Testo:
 def chiusura_non_completata(nome_bot: str, argomenti: Sequence[str]) -> Testo:
     """`argomenti`: quelli del `/chiudi` in sospeso (nessuno, la data `g/m`, o
     «rimanda»), per il comando da copiare."""
-    return Testo(
-        "Non sono riuscito a completare la chiusura del sondaggio di prima. "
-        "Chi può chiudere la riprovi con:\n" + _riga_di_comando(f"/chiudi@{nome_bot}", argomenti)
+    return (
+        _Scrittura()
+        .testo(
+            "Non sono riuscito a completare la chiusura del sondaggio di prima. "
+            "Chi può chiudere la riprovi con:\n"
+        )
+        .codice(_riga_di_comando(f"/chiudi@{nome_bot}", argomenti))
+        .fatto()
     )
 
 

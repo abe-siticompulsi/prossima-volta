@@ -51,6 +51,12 @@ smentisce una.
 
 ## Da controllare a mano nel gruppo
 
+- Un comando scritto come codice (in `/aiuto`, per esempio
+  «/chiudi@<bot> rimanda»), toccato, si copia intero e non parte: lo dice il
+  comportamento delle app di Telegram, non la Bot API. Un comando evidenziato,
+  toccato, parte senza gli argomenti (verificato il 2026-10-10: è blu solo la
+  parte prima dello spazio).
+
 - `/sondaggio@<bot>` scelto dal menu dei comandi arriva al bot con la privacy
   attiva, e il sondaggio compare nel gruppo.
 - Una menzione verso chi non ha mai scritto `/start` al bot: la notifica

@@ -535,8 +535,15 @@ Le parti che dipendono dalla configurazione si scrivono da sole: «sabato
 escluso» e la riga «con sabato» dai giorni fuori da `PV_GIORNI` (con più giorni
 fuori, «sabato e domenica esclusi» e l'esempio con il primo; con nessuno, solo
 «sondaggio sulla settimana prossima» e niente riga «con …»); «Chiude Gio (o
-Abe, in emergenza)» dal roster, come in §3.7. I comandi sono quelli da toccare
-nel messaggio: Telegram li evidenzia.
+Abe, in emergenza)» dal roster, come in §3.7.
+
+**I comandi da copiare sono codice.** Toccato, un comando evidenziato da
+Telegram parte senza quello che segue: «/chiudi@<bot> rimanda» chiuderebbe il
+sondaggio senza rimandarlo, e non si torna indietro. Perciò, nei messaggi del
+bot, i comandi con argomenti (in `/aiuto` tutti, nel rifiuto di «con», nei
+«riprovate con:», in «impossibile») hanno un'entità `code`: toccati, si
+copiano interi. Restano evidenziati solo i comandi da soli, senza argomenti (per
+esempio «chiudilo prima con /chiudi@<bot>»).
 
 ## 4. Errori
 

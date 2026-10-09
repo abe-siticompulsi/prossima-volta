@@ -34,6 +34,7 @@ def menzionati(chiamata):
     return [
         unita[2 * e["offset"] : 2 * (e["offset"] + e["length"])].decode("utf-16-le")
         for e in chiamata["entita"]
+        if e["type"] == "text_mention"
     ]
 
 

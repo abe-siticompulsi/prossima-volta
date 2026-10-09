@@ -5450,3 +5450,8 @@ Durante l'esecuzione:
   - i giorni con l'accento scomposto (NFD);
   - l'esempio del rifiuto di «con», che usa il primo giorno escluso;
   - «lo chiude Abe» quando il master non può chiudere e può solo uno.
+- Un tocco su un comando evidenziato manda solo il comando, senza gli argomenti
+  (Alberto l'ha visto sul telefono). Così i comandi con argomenti nei messaggi
+  del bot sono diventati codice (`_Scrittura.codice`): `/aiuto`, il rifiuto di
+  «con», i «riprovate con:», «impossibile». I bottoni per «impossibile» vengono
+  dopo, in un lavoro a parte.

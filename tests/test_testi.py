@@ -23,6 +23,7 @@ def menzionati(t: testi.Testo) -> list[tuple[str, int]]:
             e["user"]["id"],
         )
         for e in t.entita
+        if e["type"] == "text_mention"
     ]
 
 
@@ -159,7 +160,7 @@ def test_impossibile_menziona_chi_chiude_se_il_master_non_puo():
     ],
 )
 def test_i_rifiuti(rifiuto, testo):
-    assert testi.rifiuto(rifiuto, "ProssimaVoltaBot") == testi.Testo(testo)
+    assert testi.rifiuto(rifiuto, "ProssimaVoltaBot").testo == testo
 
 
 @pytest.mark.parametrize(
@@ -207,20 +208,20 @@ def test_le_risposte_ai_comandi():
     assert testi.gia_aperto(NOME) == testi.Testo(
         "C'è già un sondaggio aperto: chiudilo prima con /chiudi@ProssimaVoltaBot."
     )
-    assert testi.sondaggio_non_confermato(NOME, []) == testi.Testo(
+    assert testi.sondaggio_non_confermato(NOME, []).testo == (
         "Telegram non ha confermato il sondaggio: se non lo vedete, riprovate con:\n"
         "/sondaggio@ProssimaVoltaBot"
     )
-    assert testi.sondaggio_non_confermato(NOME, ["21/10", "23/10"]) == testi.Testo(
+    assert testi.sondaggio_non_confermato(NOME, ["21/10", "23/10"]).testo == (
         "Telegram non ha confermato il sondaggio: se non lo vedete, riprovate con:\n"
         "/sondaggio@ProssimaVoltaBot 21/10 23/10"
     )
-    assert testi.voto_sconosciuto(NOME) == testi.Testo(
+    assert testi.voto_sconosciuto(NOME).testo == (
         "Ho ricevuto un voto per un sondaggio che non conosco: "
         "forse quello che Telegram non mi ha confermato. Rilanciatelo e votate lì:\n"
         "/sondaggio@ProssimaVoltaBot"
     )
-    assert testi.voto_sconosciuto(NOME, ["mar", "gio"]) == testi.Testo(
+    assert testi.voto_sconosciuto(NOME, ["mar", "gio"]).testo == (
         "Ho ricevuto un voto per un sondaggio che non conosco: "
         "forse quello che Telegram non mi ha confermato. Rilanciatelo e votate lì:\n"
         "/sondaggio@ProssimaVoltaBot mar gio"
@@ -244,7 +245,7 @@ def test_le_risposte_ai_comandi():
     assert testi.rimandiamo(d("20/10")) == testi.Testo(
         "🔁 Rimandiamo: nuovo sondaggio sulla settimana del 20/10."
     )
-    assert testi.rimando_non_confermato(NOME, [d("21/10"), d("23/10")]) == testi.Testo(
+    assert testi.rimando_non_confermato(NOME, [d("21/10"), d("23/10")]).testo == (
         "🔒 Sondaggio chiuso. Telegram non ha confermato il sondaggio nuovo: "
         "se non lo vedete, lanciatelo con:\n/sondaggio@ProssimaVoltaBot 21/10 23/10"
     )
@@ -255,11 +256,11 @@ def test_le_risposte_ai_comandi():
     assert testi.non_ancora_chiuso() == testi.Testo(
         "Telegram non ha ancora confermato la chiusura del sondaggio di prima: riprovate fra poco."
     )
-    assert testi.chiusura_non_completata(NOME, []) == testi.Testo(
+    assert testi.chiusura_non_completata(NOME, []).testo == (
         "Non sono riuscito a completare la chiusura del sondaggio di prima. "
         "Chi può chiudere la riprovi con:\n/chiudi@ProssimaVoltaBot"
     )
-    assert testi.chiusura_non_completata(NOME, ["rimanda"]) == testi.Testo(
+    assert testi.chiusura_non_completata(NOME, ["rimanda"]).testo == (
         "Non sono riuscito a completare la chiusura del sondaggio di prima. "
         "Chi può chiudere la riprovi con:\n/chiudi@ProssimaVoltaBot rimanda"
     )
@@ -420,7 +421,41 @@ def test_chiude_uno_solo_se_il_master_non_puo():
 
 
 def test_il_rifiuto_di_con_suggerisce_un_giorno_escluso():
-    assert testi.rifiuto(regole.ConSbagliato(), NOME, (0, 1, 2, 3, 4, 5)) == testi.Testo(
+    assert testi.rifiuto(regole.ConSbagliato(), NOME, (0, 1, 2, 3, 4, 5)).testo == (
         f"Per aggiungere un giorno a quelli di sempre: /sondaggio@{NOME} con domenica."
     )
     assert testi.rifiuto(regole.ConSbagliato(), NOME, range(7)).testo.endswith("con sabato.")
+
+
+def codici(t: testi.Testo) -> list[str]:
+    """Le parti in codice (`code`), ritagliate in unità UTF-16 come Telegram."""
+    unita = t.testo.encode("utf-16-le")
+    return [
+        unita[2 * e["offset"] : 2 * (e["offset"] + e["length"])].decode("utf-16-le")
+        for e in t.entita
+        if e["type"] == "code"
+    ]
+
+
+def test_i_comandi_da_copiare_sono_codice():
+    """Un comando evidenziato, toccato, parte senza quello che segue
+    («/chiudi@bot rimanda» chiuderebbe e basta): i comandi con argomenti si
+    scrivono come codice, che un tocco copia intero."""
+    s = f"/sondaggio@{NOME}"
+    assert codici(testi.sondaggio_non_confermato(NOME, ["mar", "gio"])) == [f"{s} mar gio"]
+    assert codici(testi.voto_sconosciuto(NOME, ["14/10"])) == [f"{s} 14/10"]
+    assert codici(testi.voto_sconosciuto(NOME, con_sondaggio_aperto=True)) == []
+    assert codici(testi.rimando_non_confermato(NOME, [d("21/10")])) == [f"{s} 21/10"]
+    assert codici(testi.chiusura_non_completata(NOME, ["rimanda"])) == [f"/chiudi@{NOME} rimanda"]
+    assert codici(testi.rifiuto(regole.ConSbagliato(), NOME)) == [f"{s} con sabato"]
+    impossibile = regole.Impossibile(((d("13/10"), (GIO, ABE, EMI, SEM)),))
+    t = testi.annunci([impossibile], ROSTER, NOME, SETTIMANA_PROVE)
+    assert codici(t) == [f"/chiudi@{NOME} 13/10", f"/chiudi@{NOME} rimanda"]
+    assert menzionati(t) == [("Gio", GIO.telegram_id)]
+
+
+def test_in_aiuto_tutti_i_comandi_sono_codice():
+    s, c = f"/sondaggio@{NOME}", f"/chiudi@{NOME}"
+    assert codici(testi.aiuto(NOME, ROSTER, (0, 1, 2, 3, 4, 6))) == [
+        s, f"{s} con sabato", f"{s} mar gio", f"{s} 14/10 16/10", c, f"{c} 14/10", f"{c} rimanda"
+    ]
