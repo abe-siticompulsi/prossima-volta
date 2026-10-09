@@ -14,8 +14,9 @@ from prossima.telegram import (
     TelegramRifiuto,
     TelegramTroppeRichieste,
 )
-from tests.aggiornamenti import GRUPPO, comando
+from tests.aggiornamenti import GRUPPO, comando, risposta
 from tests.finti import TelegramFinto
+from tests.tavolo import ABE, EMI, GIO, SEM
 
 RADICE = Path(__file__).resolve().parents[1]
 
@@ -349,3 +350,27 @@ def test_avvia_usa_la_domanda_di_pv_domanda(tmp_path, caplog):
         principale.avvia({**ambiente(tmp_path), "PV_DOMANDA": "Quando si gioca?"}, telegram=telegram, fermo=fermo)
     assert [s["domanda"] for s in telegram.di_tipo("manda_sondaggio")] == ["Quando si gioca?"]
     assert "domanda «Quando si gioca?»" in caplog.text
+
+
+class TelegramConVoti(TelegramACicli):
+    """Al secondo giro i voti di Gio e di tre giocatori nel sondaggio appena
+    mandato: abbastanza per un «quasi»."""
+
+    def aggiornamenti(self, offset, attesa):
+        if len(self.chiamate_aggiornamenti()) == 1:
+            poll_id = self.ultimo_sondaggio["poll_id"]
+            self._lotti.insert(0, [risposta(poll_id, p.telegram_id, 0) for p in (GIO, ABE, EMI, SEM)])
+        return super().aggiornamenti(offset, attesa)
+
+    def chiamate_aggiornamenti(self):
+        return [c for c in self.chiamate if c[0] == "aggiornamenti"]
+
+
+def test_avvia_usa_pv_giorni_e_in_esercizio_gli_annunci_aspettano(tmp_path):
+    fermo = threading.Event()
+    telegram = TelegramConVoti(fermo, [[comando("/sondaggio")]])
+    principale.avvia({**ambiente(tmp_path), "PV_GIORNI": "mar gio"}, telegram=telegram, fermo=fermo)
+    [sondaggio] = telegram.di_tipo("manda_sondaggio")
+    assert [o.split()[0] for o in sondaggio["opzioni"][:-1]] == ["mar", "gio"]
+    # i quattro voti fanno un «quasi», ma l'ultimo voto è di adesso: aspetta
+    assert telegram.di_tipo("scrivi") == []

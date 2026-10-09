@@ -396,3 +396,31 @@ def test_aiuto_dai_giorni_di_sempre():
 def test_aiuto_dal_roster():
     solo_gio = Roster((GIO, replace(ABE, chiude=False), EMI, SEM, SESE, PIPPO))
     assert "\nChiude Gio:\n" in testi.aiuto(NOME, solo_gio, (0, 1, 2, 3, 4, 6)).testo
+
+
+
+def test_non_piu_sabato_e_domenica_al_maschile():
+    gruppo = [regole.NonPiu(d("18/10"), (SEM,)), regole.NonPiu(d("19/10"), (SEM,))]
+    assert testi.annunci(gruppo, ROSTER, NOME, SETTIMANA_PROVE) == testi.Testo(
+        "Sabato e domenica sono saltati, Sem non può più."
+    )
+
+
+def test_non_piu_i_nomi_nell_ordine_del_roster():
+    gruppo = [regole.NonPiu(d("14/10"), (SESE,)), regole.NonPiu(d("16/10"), (SEM,))]
+    assert testi.annunci(gruppo, ROSTER, NOME, SETTIMANA_PROVE) == testi.Testo(
+        "Martedì e giovedì sono saltati, Sem e Sese non possono più."
+    )
+
+
+def test_chiude_uno_solo_se_il_master_non_puo():
+    roster = Roster((replace(GIO, chiude=False), ABE, EMI))
+    assert testi.chi_chiude(roster) == "chiude Abe"
+    assert testi.solo_chi_chiude(roster) == testi.Testo("Il sondaggio lo chiude Abe.")
+
+
+def test_il_rifiuto_di_con_suggerisce_un_giorno_escluso():
+    assert testi.rifiuto(regole.ConSbagliato(), NOME, (0, 1, 2, 3, 4, 5)) == testi.Testo(
+        f"Per aggiungere un giorno a quelli di sempre: /sondaggio@{NOME} con domenica."
+    )
+    assert testi.rifiuto(regole.ConSbagliato(), NOME, range(7)).testo.endswith("con sabato.")

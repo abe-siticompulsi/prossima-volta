@@ -133,6 +133,11 @@ def test_un_voto_al_sondaggio_di_prima_arrivato_dopo_la_riapertura(bot, telegram
     riaperto = store.sondaggio_aperto()
     assert riaperto.date == (d("14/10"),)
     vota(bot, telegram, ABE, "nessuna")  # abe vota nel sondaggio riaperto
+    voto_di_abe = orologio.adesso
+    orologio.avanza(minutes=1)
+    bot.ricevi([risposta(vecchio.poll_id, ABE.telegram_id, 1)])
+    # scartato (abe ha già votato nel sondaggio riaperto): non fa aspettare
+    assert bot._ultimo_voto == voto_di_abe
     # voti dati nel sondaggio di prima poco prima dello stop, arrivati dopo la
     # riapertura: le opzioni sono quelle di prima (la seconda era il 14/10)
     bot.ricevi(
@@ -142,6 +147,7 @@ def test_un_voto_al_sondaggio_di_prima_arrivato_dopo_la_riapertura(bot, telegram
             risposta(vecchio.poll_id, ABE.telegram_id, 1),
         ]
     )
+    assert bot._ultimo_voto == orologio.adesso  # quelli tenuti fanno aspettare
     voti = store.voti(riaperto.id)
     assert voti[GIO.telegram_id] == Voto(frozenset({d("14/10")}))
     assert voti[EMI.telegram_id] == Voto(frozenset({d("8/10"), d("14/10")}))
@@ -489,6 +495,7 @@ def test_i_voti_al_sondaggio_fermato_mentre_la_riapertura_aspetta_si_tengono(
     dopo_il_buio(bot, orologio)
     # un voto dato poco prima dello stop, arrivato mentre la riapertura aspetta
     bot.ricevi([risposta(vecchio.poll_id, GIO.telegram_id, 0)])
+    assert bot._ultimo_voto == orologio.adesso  # gli annunci aspettano anche questo voto
     del telegram.guasti["manda_sondaggio"]
     orologio.avanza(minutes=10)  # dopo un errore di rete la riapertura aspetta 10 minuti
     bot.ricevi([])

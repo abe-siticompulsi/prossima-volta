@@ -56,5 +56,5 @@ smentisce una.
 - Una menzione verso chi non ha mai scritto `/start` al bot: la notifica
   arriva? Il messaggio parte, o Telegram lo rifiuta («annuncio rifiutato da
   Telegram» nel log)? Il piano reale menziona solo Alberto, che l'ha scritto.
-- Una menzione («Non hanno ancora votato: …», «gio, abe: …») notifica la
+- Una menzione («Pippo, ci sei?», «Gio: …») notifica la
   persona, anche chi non ha un nome utente.

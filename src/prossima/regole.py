@@ -10,6 +10,7 @@ servono a scriverlo.
 from __future__ import annotations
 
 import re
+import unicodedata
 from calendar import isleap
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -92,8 +93,9 @@ class GiornoAmbiguo(Rifiuto):
 
 def giorno_della_parola(parola: str) -> int | None:
     """Il giorno della settimana di una parola («mar», «Martedì», «martedi» →
-    1), o None se la parola non è un giorno."""
-    return _NOMI_DEI_GIORNI.get(parola.lower())
+    1), o None se la parola non è un giorno. L'accento può arrivare scomposto
+    (la «i» e l'accento separati, NFD): si ricompone prima."""
+    return _NOMI_DEI_GIORNI.get(unicodedata.normalize("NFC", parola).lower())
 
 
 def breve(giorno: date) -> str:

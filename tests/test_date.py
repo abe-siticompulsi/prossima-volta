@@ -1,3 +1,4 @@
+import unicodedata
 from datetime import date, timedelta
 
 import pytest
@@ -283,3 +284,12 @@ def test_rimandare_tiene_i_giorni_della_settimana_nella_settimana_dopo():
     assert regole.date_rimandate(settimana) == [d(g) for g in ("20/10", "21/10", "22/10", "23/10", "24/10", "26/10")]
     # su due settimane: la settimana dopo quella dell'ultima data
     assert regole.date_rimandate([d("14/10"), d("23/10")]) == [d("28/10"), d("30/10")]
+
+
+
+def test_un_giorno_con_l_accento_scomposto():
+    """«martedì» con la «i» e l'accento separati (NFD), come può arrivare da una
+    tastiera o da un copia e incolla."""
+    scomposto = unicodedata.normalize("NFD", "martedì")
+    assert scomposto != "martedì"
+    assert regole.date_del_comando([scomposto], OGGI) == [d("14/10")]

@@ -225,7 +225,9 @@ class Bot:
         try:
             date_ = regole.date_del_comando(parole, self._oggi(), self._giorni)
         except regole.Rifiuto as r:
-            self._invio.accoda(testi.rifiuto(r, self._nome), risposta_a=messaggio["message_id"])
+            self._invio.accoda(
+                testi.rifiuto(r, self._nome, self._giorni), risposta_a=messaggio["message_id"]
+            )
             return
         try:
             mandato, frase = self._invio.nuovo_sondaggio(date_)
@@ -256,7 +258,7 @@ class Bot:
                 return
             voto = regole.voto_da_opzioni(sondaggio.date, opzioni)
             self._store.registra_voto(sondaggio.id, utente["id"], poll_id, voto, self._adesso())
-            self._ultimo_voto = self._adesso()
+            self._voto_registrato(utente["id"])
         elif fermo is not None and poll_id == fermo.poll_id:
             # dato poco prima dello stop, arrivato mentre la riapertura aspetta: si
             # tiene, come gli altri voti, per il sondaggio riaperto
@@ -264,7 +266,7 @@ class Bot:
                 return
             voto = regole.voto_da_opzioni(fermo.date, opzioni)
             self._store.registra_voto(fermo.id, utente["id"], poll_id, voto, self._adesso())
-            self._ultimo_voto = self._adesso()
+            self._voto_registrato(utente["id"])
         elif sondaggio is not None and sondaggio.poll_prima is not None and poll_id == sondaggio.poll_prima:
             # Dato nel sondaggio di prima della ripresa, poco prima dello stop, e
             # arrivato dopo la riapertura: vale se la persona non ha votato nel
@@ -272,13 +274,19 @@ class Bot:
             if utente is None:
                 return
             voto = regole.voto_da_opzioni(sondaggio.date_prima, opzioni)
-            self._store.registra_voto_tardivo(
+            if self._store.registra_voto_tardivo(
                 sondaggio.id, utente["id"], poll_id, voto, self._adesso(), sondaggio.poll_id
-            )
-            self._ultimo_voto = self._adesso()
+            ):
+                self._voto_registrato(utente["id"])
         elif not self._store.poll_conosciuto(poll_id):
             self._voto_sconosciuto(poll_id)
         # un voto per un sondaggio che il bot conosce, ma non è aperto: si ignora
+
+    def _voto_registrato(self, utente_id: int) -> None:
+        """Gli annunci aspettano 2 minuti dall'ultimo voto registrato di una
+        persona del roster: gli altri voti non cambiano nessun annuncio."""
+        if self._roster.per_id(utente_id) is not None:
+            self._ultimo_voto = self._adesso()
 
     def _voto_sconosciuto(self, poll_id: str) -> None:
         """Telegram manda al bot solo i voti dei sondaggi del bot: questo è un

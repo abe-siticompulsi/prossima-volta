@@ -829,3 +829,63 @@ def test_aiuto(bot, telegram):
         "/chiudi@ProssimaVoltaBot rimanda — chiude e rifà il sondaggio sulla settimana dopo"
     ]
     assert telegram.di_tipo("scrivi")[0]["risposta_a"] == aiuto["message"]["message_id"]
+
+
+def test_aiuto_dai_giorni_della_configurazione(riavvia, telegram):
+    riavvia(giorni=(1, 3)).ricevi([comando("/aiuto")])
+    righe = telegram.scritti()[0].split("\n")
+    assert righe[1].endswith("lunedì, mercoledì, venerdì, sabato e domenica esclusi")
+    assert righe[2] == "/sondaggio@ProssimaVoltaBot con lunedì — anche il lunedì"
+
+
+def test_con_usato_male_suggerisce_un_giorno_escluso(riavvia, telegram):
+    riavvia(giorni=(0, 1, 2, 3, 4, 5)).ricevi([comando("/sondaggio con")])
+    assert telegram.scritti() == [
+        "Per aggiungere un giorno a quelli di sempre: /sondaggio@ProssimaVoltaBot con domenica."
+    ]
+
+
+def test_i_voti_di_chi_non_e_nel_roster_non_fanno_aspettare(riavvia, telegram, orologio):
+    bot = riavvia(attesa_annunci=ATTESA_ANNUNCI)
+    quattro_su_martedi(bot, telegram)
+    orologio.avanza(minutes=1, seconds=30)
+    vota(bot, telegram, ESTRANEO, "14/10")
+    orologio.avanza(seconds=31)
+    bot.ricevi([])
+    assert telegram.scritti() == ["Martedì ci siamo quasi. Sese e Pippo, ci siete?"]
+
+
+def test_un_errore_sul_secondo_messaggio_non_ripete_il_primo(bot, telegram, monkeypatch):
+    bot.ricevi([comando("/sondaggio lun mar")])
+    vota(bot, telegram, GIO, "13/10 14/10")
+    vota(bot, telegram, ABE, "13/10 14/10")
+    vota(bot, telegram, EMI, "13/10")
+    vota(bot, telegram, SEM, "13/10 14/10")
+    vota(bot, telegram, SESE, "13/10")
+    vero = telegram.scrivi
+    caduti = []
+
+    def cade_su_martedi(chat_id, testo, entita=(), risposta_a=None):
+        if testo.startswith("Martedì ci siamo quasi") and not caduti:
+            caduti.append(testo)
+            raise telegram_guasto("scrivi")
+        return vero(chat_id, testo, entita, risposta_a)
+
+    monkeypatch.setattr(telegram, "scrivi", cade_su_martedi)
+    prima = len(telegram.scritti())
+    vota(bot, telegram, EMI, "14/10")
+    bot.ricevi([])
+    assert telegram.scritti()[prima:] == [
+        "Lunedì è saltato, Emi non può più.",
+        "Martedì ci siamo quasi. Pippo, ci sei?",
+    ]
+
+
+def test_le_date_dette_guardano_tutto_il_sondaggio(bot, telegram, orologio):
+    """Il sondaggio sta su due settimane: anche quando restano solo le date
+    della seconda, si dice il numero."""
+    bot.ricevi([comando("/sondaggio 16/10 21/10")])
+    fino_al(bot, orologio, 17)
+    for persona in (GIO, ABE, EMI, SEM):
+        vota(bot, telegram, persona, "21/10")
+    assert telegram.scritti() == ["Martedì 21 ci siamo quasi. Sese e Pippo, ci siete?"]

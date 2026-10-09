@@ -5439,3 +5439,14 @@ Durante l'esecuzione:
   date (aggiunto alla spec).
 - La prova del messaggio che non è un comando usava `/aiuto` come comando
   sconosciuto: adesso usa `/start`.
+- La revisione del ramo ha portato:
+  - le prove che mancavano (l'attesa vera di 2 minuti in esercizio, `PV_GIORNI`
+    che arriva al bot, `/aiuto` dai giorni della configurazione, l'attesa nei
+    percorsi della ripresa, un errore di rete sul secondo messaggio, l'ordine
+    «non più» prima di «possibile», sabato e domenica al maschile, i nomi
+    nell'ordine del roster, le date dette guardando tutto il sondaggio);
+  - l'attesa che riparte solo per i voti registrati di persone del roster (non
+    per un voto tardivo scartato, non per chi non è nel roster);
+  - i giorni con l'accento scomposto (NFD);
+  - l'esempio del rifiuto di «con», che usa il primo giorno escluso;
+  - «lo chiude Abe» quando il master non può chiudere e può solo uno.

@@ -278,8 +278,11 @@ def aiuto(nome_bot: str, roster: regole.Roster, giorni_di_sempre: Collection[int
 # --- le risposte ai comandi
 
 
-def rifiuto(r: regole.Rifiuto, nome_bot: str) -> Testo:
-    """I rifiuti di `/sondaggio`."""
+def rifiuto(
+    r: regole.Rifiuto, nome_bot: str, giorni_di_sempre: Collection[int] = regole.GIORNI_DI_SEMPRE
+) -> Testo:
+    """I rifiuti di `/sondaggio`. L'esempio di «con» usa il primo giorno fuori
+    da quelli di sempre (il sabato, se non ce n'è nessuno)."""
     match r:
         case regole.NonCapisco():
             return Testo(
@@ -292,8 +295,10 @@ def rifiuto(r: regole.Rifiuto, nome_bot: str) -> Testo:
         case regole.TroppeDate():
             return Testo(f"Troppe date: al massimo {regole.MASSIMO_DATE}.")
         case regole.ConSbagliato():
+            fuori = [g for g in range(7) if g not in giorni_di_sempre]
+            esempio = regole.GIORNI_INTERI[fuori[0] if fuori else 5]
             return Testo(
-                f"Per aggiungere un giorno a quelli di sempre: /sondaggio@{nome_bot} con sabato."
+                f"Per aggiungere un giorno a quelli di sempre: /sondaggio@{nome_bot} con {esempio}."
             )
     raise TypeError(f"rifiuto sconosciuto: {r!r}")
 

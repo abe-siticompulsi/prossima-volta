@@ -104,8 +104,8 @@ secondi (`init: true` in `compose.yaml` fa arrivare il segnale a Python). Poi
   sabato` c'è anche quello).
 - Dallo stesso menu, `/aiuto`: il bot risponde con le istruzioni dei comandi.
 - Gli annunci arrivano due minuti dopo l'ultimo voto, non subito: è voluto.
-- Quando arriva il primo annuncio con dei nomi («Non hanno ancora votato: …»),
-  chiedi alle persone nominate se hanno ricevuto la notifica. Il controllo
+- Quando arriva il primo annuncio con dei nomi («Martedì ci siamo quasi. Pippo,
+  ci sei?»), chiedi alle persone nominate se hanno ricevuto la notifica. Il controllo
   copre due casi: una persona che ha già scritto `/start` al bot (punto 1) e
   una che non l'ha ancora fatto (finché qualcuno non l'ha fatto, è il momento).
   Se l'annuncio non compare nel gruppo, cerca nel log «annuncio rifiutato da

@@ -292,3 +292,11 @@ def test_gli_annunci_per_tipo():
     # il 14/10 è quasi, il 16/10 non è più possibile: per data sarebbe il contrario
     s = stato("14/10 16/10 17/10", gio="14/10 16/10", abe="14/10 16/10", emi="14/10 16/10", sem="14/10")
     assert [type(a) for a in regole.annunci_da_fare(s, fatti)] == [NonPiu, Quasi]
+
+
+
+def test_non_piu_prima_di_possibile():
+    c_erano = frozenset(p.telegram_id for p in (GIO, ABE, EMI, SEM, SESE))
+    fatti = Fatti(possibili={d("16/10"): c_erano})
+    s = stato(gio="14/10", abe="14/10", emi="14/10", sem="14/10", sese="14/10")
+    assert [type(a) for a in regole.annunci_da_fare(s, fatti)] == [NonPiu, Possibile]

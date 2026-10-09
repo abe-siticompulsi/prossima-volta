@@ -78,7 +78,8 @@ e ignora i comandi rivolti ad altri bot.
   - più di 10 date: «Troppe date: al massimo 10.»;
   - «con» non per primo, da solo, o seguito da qualcosa che non è un giorno:
     «Per aggiungere un giorno a quelli di sempre: /sondaggio@<bot> con
-    sabato.»;
+    sabato.» (l'esempio è il primo giorno fuori da quelli di sempre; il sabato,
+    se non ce n'è nessuno);
   - un sondaggio già aperto: risposta al messaggio del sondaggio aperto, «C'è
     già un sondaggio aperto: chiudilo prima con /chiudi@<bot>.».
 - **Telegram non conferma il sondaggio** (rete, 5xx, un rifiuto, la pausa
@@ -152,7 +153,8 @@ chiusura (§3.7) e i comandi da copiare restano nella forma «mar 14/10» e
 «14/10».
 
 **L'attesa.** Il bot annuncia solo quando nel sondaggio aperto non arrivano
-voti nuovi da **2 minuti**: dice la situazione quando i voti si sono assestati,
+voti nuovi di persone del roster da **2 minuti** (i voti di altri non cambiano
+nessun annuncio, e un voto tardivo scartato, §3.8, non conta): dice la situazione quando i voti si sono assestati,
 e uno stato di passaggio (una data che va bene per pochi secondi, mentre
 qualcuno cambia voto) non si annuncia. Il ciclo legge Telegram almeno ogni 25
 secondi, quindi un annuncio parte fra 2 e circa 2 minuti e mezzo dopo l'ultimo
@@ -252,7 +254,8 @@ nel file non contano. Le frasi predefinite:
 
 Solo le persone con `chiude = true`. Altrimenti: «Il sondaggio lo chiude Gio (o
 Abe, in emergenza).» (i nomi dal roster: il master, poi gli altri con `chiude =
-true`; se il master non può chiudere, «Il sondaggio lo chiudono …»). Senza sondaggio aperto: «Non c'è nessun sondaggio
+true`; se il master non può chiudere, «Il sondaggio lo chiudono Abe e Emi.», o
+«Il sondaggio lo chiude Abe.» se può solo uno). Senza sondaggio aperto: «Non c'è nessun sondaggio
 aperto.» (salvo il sondaggio che una ripresa ha fermato e aspetta di riaprire,
 che si chiude come se fosse aperto, §3.8)
 
