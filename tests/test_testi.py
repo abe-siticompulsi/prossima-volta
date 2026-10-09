@@ -115,32 +115,42 @@ def test_non_piu_la_domenica_e_senza_nomi():
 
 def test_impossibile():
     con_tre = regole.Impossibile(
-        ((d("13/10"), (GIO, ABE, EMI, SEM)), (d("16/10"), (GIO, ABE, EMI, SESE)))
+        ((d("13/10"), (GIO, ABE, EMI, SEM)), (d("16/10"), (GIO, ABE, EMI, SESE)), (d("17/10"), (GIO, ABE, EMI, SEM)))
     )
-    t = testi.annunci([con_tre], ROSTER, NOME, SETTIMANA_PROVE)
+    t = testi.annunci([con_tre], ROSTER, NOME, SETTIMANA_PROVE, 7)
     assert t.testo == (
-        "😬 Con i voti attuali non ci sono date con quattro giocatori. Con tre: lunedì e giovedì. "
-        "Gio: /chiudi@ProssimaVoltaBot 13/10 per tenerne una, "
-        "/chiudi@ProssimaVoltaBot rimanda per rimandare alla prossima settimana."
+        "😬 Con i voti attuali non ci sono date con quattro giocatori. "
+        "Con tre: lunedì, giovedì e venerdì. Gio, decidi tu:"
     )
     assert menzionati(t) == [("Gio", GIO.telegram_id)]
-    una = regole.Impossibile(((d("13/10"), (GIO, ABE, EMI, SEM)),))
-    assert "Con tre: lunedì. Gio: /chiudi@ProssimaVoltaBot 13/10 per tenerla, " in (
-        testi.annunci([una], ROSTER, NOME, SETTIMANA_PROVE).testo
+    assert t.bottoni == (
+        (("Tieni lunedì", "chiudi:7:13/10"), ("Tieni giovedì", "chiudi:7:16/10")),
+        (("Tieni venerdì", "chiudi:7:17/10"),),
+        (("Rimanda alla prossima settimana", "chiudi:7:rimanda"),),
     )
-    senza = testi.annunci([regole.Impossibile(())], ROSTER, NOME, SETTIMANA_PROVE)
+    senza = testi.annunci([regole.Impossibile(())], ROSTER, NOME, SETTIMANA_PROVE, 7)
     assert senza.testo == (
         "😬 Con i voti attuali non ci sono date con quattro giocatori, e nemmeno con tre. "
-        "Gio: /chiudi@ProssimaVoltaBot rimanda per rimandare alla prossima settimana."
+        "Gio, decidi tu:"
     )
     assert menzionati(senza) == [("Gio", GIO.telegram_id)]
+    assert senza.bottoni == ((("Rimanda alla prossima settimana", "chiudi:7:rimanda"),),)
+
+
+def test_impossibile_su_due_settimane_dice_il_numero_nei_bottoni():
+    a = regole.Impossibile(((d("16/10"), (GIO, ABE, EMI, SEM)),))
+    t = testi.annunci([a], ROSTER, NOME, DUE_SETTIMANE, 7)
+    assert t.bottoni[0] == (("Tieni giovedì 16", "chiudi:7:16/10"),)
 
 
 def test_impossibile_menziona_chi_chiude_se_il_master_non_puo():
     roster = Roster((replace(GIO, chiude=False), ABE, EMI, SEM, SESE, PIPPO))
     t = testi.annunci([regole.Impossibile(())], roster, NOME, SETTIMANA_PROVE)
-    assert "nemmeno con tre. Abe: /chiudi@" in t.testo
+    assert t.testo.endswith("nemmeno con tre. Abe, decidi tu:")
     assert menzionati(t) == [("Abe", ABE.telegram_id)]
+    due = Roster((replace(GIO, chiude=False), ABE, replace(EMI, chiude=True), SEM, SESE, PIPPO))
+    t = testi.annunci([regole.Impossibile(())], due, NOME, SETTIMANA_PROVE)
+    assert t.testo.endswith("nemmeno con tre. Abe e Emi, decidete voi:")
 
 
 @pytest.mark.parametrize(
@@ -448,10 +458,6 @@ def test_i_comandi_da_copiare_sono_codice():
     assert codici(testi.rimando_non_confermato(NOME, [d("21/10")])) == [f"{s} 21/10"]
     assert codici(testi.chiusura_non_completata(NOME, ["rimanda"])) == [f"/chiudi@{NOME} rimanda"]
     assert codici(testi.rifiuto(regole.ConSbagliato(), NOME)) == [f"{s} con sabato"]
-    impossibile = regole.Impossibile(((d("13/10"), (GIO, ABE, EMI, SEM)),))
-    t = testi.annunci([impossibile], ROSTER, NOME, SETTIMANA_PROVE)
-    assert codici(t) == [f"/chiudi@{NOME} 13/10", f"/chiudi@{NOME} rimanda"]
-    assert menzionati(t) == [("Gio", GIO.telegram_id)]
 
 
 def test_in_aiuto_tutti_i_comandi_sono_codice():

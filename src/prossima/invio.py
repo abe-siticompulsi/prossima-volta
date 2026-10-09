@@ -157,7 +157,7 @@ class Invio:
         """Un messaggio nel gruppo, subito e senza la posta: un errore esce di
         qui, e chi chiama sa se è partito (un annuncio conta come fatto solo
         dopo che Telegram l'ha accettato)."""
-        self._invia(self._tg.scrivi, self._gruppo, testo.testo, testo.entita)
+        self._invia(self._tg.scrivi, self._gruppo, testo.testo, testo.entita, None, testo.bottoni)
 
     def ferma(self, sondaggio: Sondaggio) -> Fermato:
         """Ferma il sondaggio su Telegram. Non lo chiude nel database: lo fa chi

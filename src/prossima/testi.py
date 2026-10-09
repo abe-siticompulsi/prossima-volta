@@ -13,7 +13,7 @@ la spec.
 from __future__ import annotations
 
 from collections.abc import Callable, Collection, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, tzinfo
 
 from . import regole
@@ -44,10 +44,15 @@ FRASI_NESSUNA = (
 )
 
 
+# Un bottone sotto un messaggio: (etichetta, dato del `callback_query`).
+Bottone = tuple[str, str]
+
+
 @dataclass(frozen=True)
 class Testo:
     testo: str
     entita: tuple[dict, ...] = ()  # entità Telegram, pronte per `sendMessage`
+    bottoni: tuple[tuple[Bottone, ...], ...] = ()  # righe di bottoni (§3.10)
 
 
 def utf16(testo: str) -> int:
@@ -177,10 +182,12 @@ def annunci(
     roster: regole.Roster,
     nome_bot: str,
     date_sondaggio: Sequence[date],
+    sondaggio_id: int = 0,
 ) -> Testo:
     """Un messaggio per un gruppo di annunci dello stesso tipo, nell'ordine
     delle date (§3.5). Le date si dicono per giorno se il sondaggio sta in una
-    settimana: `date_sondaggio` sono tutte le sue date."""
+    settimana: `date_sondaggio` sono tutte le sue date. `sondaggio_id` va nei
+    bottoni di «impossibile» (§3.10)."""
     solo_il_giorno = una_settimana(date_sondaggio)
     giorni = [a.giorno for a in gruppo if not isinstance(a, regole.Impossibile)]
     match gruppo[0]:
@@ -198,7 +205,7 @@ def annunci(
         case regole.NonPiu():
             return _non_piu(gruppo, roster, giorni, solo_il_giorno)
         case regole.Impossibile() as a:
-            return _impossibile(a, roster, nome_bot, solo_il_giorno)
+            return _impossibile(a, roster, solo_il_giorno, sondaggio_id)
     raise TypeError(f"annuncio sconosciuto: {gruppo[0]!r}")
 
 
@@ -227,26 +234,29 @@ def _non_piu(
 
 
 def _impossibile(
-    a: regole.Impossibile, roster: regole.Roster, nome_bot: str, solo_il_giorno: bool
+    a: regole.Impossibile, roster: regole.Roster, solo_il_giorno: bool, sondaggio_id: int
 ) -> Testo:
-    """Menziona il master, che decide; se il master non può chiudere, chi può."""
+    """Menziona il master, che decide con i bottoni (§3.10); se il master non
+    può chiudere, chi può."""
     chi = (roster.master,) if roster.master.chiude else roster.chi_chiude
-    chiudi = f"/chiudi@{nome_bot}"
     s = _Scrittura()
     if a.con_tre:
         giorni = [g for g, _ in a.con_tre]
-        tenere = "per tenerla" if len(giorni) == 1 else "per tenerne una"
         s.testo(
             "😬 Con i voti attuali non ci sono date con quattro giocatori. "
             f"Con tre: {date_dette(giorni, solo_il_giorno)}. "
         )
-        s.menzioni(chi, " e ").testo(": ").codice(f"{chiudi} {regole.breve(giorni[0])}")
-        s.testo(f" {tenere}, ")
     else:
+        giorni = []
         s.testo("😬 Con i voti attuali non ci sono date con quattro giocatori, e nemmeno con tre. ")
-        s.menzioni(chi, " e ").testo(": ")
-    s.codice(f"{chiudi} rimanda").testo(" per rimandare alla prossima settimana.")
-    return s.fatto()
+    s.menzioni(chi, " e ").testo(", decidi tu:" if len(chi) == 1 else ", decidete voi:")
+    tieni = [
+        (f"Tieni {giorno_detto(g, solo_il_giorno)}", f"chiudi:{sondaggio_id}:{regole.breve(g)}")
+        for g in giorni
+    ]
+    righe = [tuple(tieni[i : i + 2]) for i in range(0, len(tieni), 2)]
+    righe.append((("Rimanda alla prossima settimana", f"chiudi:{sondaggio_id}:{regole.RIMANDA}"),))
+    return replace(s.fatto(), bottoni=tuple(righe))
 
 
 # --- le istruzioni (§3.9)

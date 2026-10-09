@@ -440,7 +440,7 @@ def test_impossibile_e_di_nuovo_dopo_che_una_data_e_tornata_in_gioco(bot, telegr
     vota(bot, telegram, GIO, "nessuna")
     impossibile = (
         "😬 Con i voti attuali non ci sono date con quattro giocatori, e nemmeno con tre. "
-        "Gio: /chiudi@ProssimaVoltaBot rimanda per rimandare alla prossima settimana."
+        "Gio, decidi tu:"
     )
     assert telegram.scritti() == [impossibile, impossibile]
     assert menzionati(telegram.di_tipo("scrivi")[0]) == ["Gio"]
@@ -477,7 +477,7 @@ def test_impossibile_conta_solo_le_date_da_oggi_in_poi(bot, telegram, orologio):
     # nessuna data da tenere, e il 14 (con tre, ma passato) non si propone
     assert telegram.scritti() == [
         "😬 Con i voti attuali non ci sono date con quattro giocatori, e nemmeno con tre. "
-        "Gio: /chiudi@ProssimaVoltaBot rimanda per rimandare alla prossima settimana."
+        "Gio, decidi tu:"
     ]
 
 
@@ -515,7 +515,7 @@ def test_senza_un_possibile_su_una_data_passata_l_impossibile_lo_dice_il_tempo(
     # da oggi in poi resta il 16, fuori: lo dice il passare del tempo, non un voto
     assert telegram.scritti() == [
         "😬 Con i voti attuali non ci sono date con quattro giocatori, e nemmeno con tre. "
-        "Gio: /chiudi@ProssimaVoltaBot rimanda per rimandare alla prossima settimana."
+        "Gio, decidi tu:"
     ]
 
 
@@ -632,10 +632,10 @@ def test_un_annuncio_rifiutato_non_ferma_i_seguenti(bot, telegram, store, monkey
     vota(bot, telegram, SESE, "13/10")  # lunedì si può fare
     vero = telegram.scrivi
 
-    def rifiuta_lunedi(chat_id, testo, entita=(), risposta_a=None):
+    def rifiuta_lunedi(chat_id, testo, entita=(), risposta_a=None, bottoni=()):
         if testo.startswith("Lunedì è saltato"):
             raise TelegramRifiuto("sendMessage: Bad Request: can't parse entities")
-        return vero(chat_id, testo, entita, risposta_a)
+        return vero(chat_id, testo, entita, risposta_a, bottoni)
 
     monkeypatch.setattr(telegram, "scrivi", rifiuta_lunedi)
     prima = len(telegram.scritti())
@@ -657,7 +657,7 @@ def test_un_annuncio_rifiutato_si_salta_fino_al_riavvio(
         vota(bot, telegram, persona, "14/10")
     tentativi = []
 
-    def rifiuta(chat_id, testo, entita=(), risposta_a=None):
+    def rifiuta(chat_id, testo, entita=(), risposta_a=None, bottoni=()):
         tentativi.append(testo)
         raise TelegramRifiuto("sendMessage: Bad Request: can't parse entities")
 
@@ -866,11 +866,11 @@ def test_un_errore_sul_secondo_messaggio_non_ripete_il_primo(bot, telegram, monk
     vero = telegram.scrivi
     caduti = []
 
-    def cade_su_martedi(chat_id, testo, entita=(), risposta_a=None):
+    def cade_su_martedi(chat_id, testo, entita=(), risposta_a=None, bottoni=()):
         if testo.startswith("Martedì ci siamo quasi") and not caduti:
             caduti.append(testo)
             raise telegram_guasto("scrivi")
-        return vero(chat_id, testo, entita, risposta_a)
+        return vero(chat_id, testo, entita, risposta_a, bottoni)
 
     monkeypatch.setattr(telegram, "scrivi", cade_su_martedi)
     prima = len(telegram.scritti())
