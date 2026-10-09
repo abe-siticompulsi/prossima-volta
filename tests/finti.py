@@ -54,6 +54,7 @@ class TelegramFinto:
         self.conteggi: dict[int, list[int]] = {}
         self.cancellati: set[int] = set()  # messaggi cancellati da qualcuno nel gruppo
         self.fermati: set[int] = set()  # i messaggi dei sondaggi fermati
+        self.ultimo_scritto: int | None = None  # l'identificativo dell'ultimo messaggio scritto
         self._ultimo_id = 500
 
     def _guasto(self, nome: str) -> None:
@@ -101,6 +102,7 @@ class TelegramFinto:
         messaggio = self._registra(
             "scrivi", chat_id=chat_id, testo=testo, entita=list(entita), risposta_a=risposta_a, **extra
         )
+        self.ultimo_scritto = messaggio
         return self._risposta(
             "scrivi", {"message_id": messaggio, "chat": {"id": chat_id}, "text": testo}
         )

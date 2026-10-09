@@ -395,6 +395,11 @@ def solo_chi_chiude(roster: regole.Roster) -> Testo:
     return Testo(f"Il sondaggio lo {chi_chiude(roster)}.")
 
 
+def gia_chiuso_al_tocco() -> Testo:
+    """L'avviso per chi tocca un bottone di un sondaggio che non è più aperto."""
+    return Testo("Il sondaggio è già chiuso.")
+
+
 def nessun_sondaggio() -> Testo:
     return Testo("Non c'è nessun sondaggio aperto.")
 

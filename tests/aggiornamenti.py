@@ -42,6 +42,22 @@ def risposta(poll_id: str, da: int, *opzioni: int) -> dict:
     }
 
 
+def tocco(dato: str, messaggio: int, da: int = GIO.telegram_id, chat: int = GRUPPO) -> dict:
+    """Un tocco su un bottone sotto il messaggio `messaggio` del bot: arriva come
+    `callback_query`, anche con la privacy attiva."""
+    n = next(_numeri)
+    return {
+        "update_id": 1000 + n,
+        "callback_query": {
+            "id": f"tocco-{n}",
+            "from": {"id": da, "is_bot": False, "first_name": "x"},
+            "message": {"message_id": messaggio, "chat": {"id": chat, "type": "supergroup"}},
+            "chat_instance": "istanza",
+            "data": dato,
+        },
+    }
+
+
 def vota(bot, telegram, chi: Persona | int, scritto: str = "") -> None:
     """`chi` (una persona, o un identificativo Telegram) vota nell'ultimo
     sondaggio mandato: «14/10 16/10», «nessuna», oppure «» per togliere il voto."""

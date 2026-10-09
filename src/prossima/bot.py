@@ -158,6 +158,8 @@ class Bot:
             self._voto(aggiornamento["poll_answer"])
         elif "message" in aggiornamento:
             self._messaggio(aggiornamento["message"])
+        elif "callback_query" in aggiornamento:
+            self._tocco(aggiornamento["callback_query"])
 
     def manda(self) -> None:
         """La posta in uscita, in ordine; lo stop di una chiusura in sospeso (e,
@@ -193,6 +195,37 @@ class Bot:
                 testi.aiuto(self._nome, self._roster, self._giorni),
                 risposta_a=messaggio["message_id"],
             )
+
+    def _tocco(self, tocco: dict) -> None:
+        """Un tocco su un bottone di «impossibile» (§3.10): per chi può chiudere,
+        sul sondaggio del bottone, vale come `/chiudi <argomento>` della stessa
+        persona, con le risposte al messaggio dei bottoni."""
+        messaggio = tocco.get("message") or {}
+        azione, _, resto = (tocco.get("data") or "").partition(":")
+        sondaggio_id, _, argomento = resto.partition(":")
+        if (
+            messaggio.get("chat", {}).get("id") != self._gruppo
+            or azione != "chiudi"
+            or not sondaggio_id.isdigit()
+            or not argomento
+        ):
+            self._invio.rispondi_al_tocco(tocco["id"])
+            return
+        chi = self._roster.per_id(tocco.get("from", {}).get("id"))
+        if chi is None or not chi.chiude:
+            self._invio.rispondi_al_tocco(tocco["id"], testi.solo_chi_chiude(self._roster).testo)
+            return
+        sondaggio = self._store.sondaggio_aperto() or self._ripresa.in_riapertura()
+        if sondaggio is None or sondaggio.id != int(sondaggio_id):
+            self._invio.rispondi_al_tocco(tocco["id"], testi.gia_chiuso_al_tocco().testo)
+            self._invio.togli_bottoni(messaggio["message_id"])
+            return
+        self._invio.rispondi_al_tocco(tocco["id"])
+        comando = {"message_id": messaggio["message_id"], "from": tocco["from"], "chat": messaggio["chat"]}
+        self._chiusure.chiudi(comando, [argomento])
+        dopo = self._store.sondaggio_aperto() or self._ripresa.in_riapertura()
+        if dopo is None or dopo.id != sondaggio.id:
+            self._invio.togli_bottoni(messaggio["message_id"])
 
     def _comando(self, parola: str) -> str | None:
         """«/sondaggio» o «/sondaggio@<nome del bot>» → «sondaggio»; un comando
@@ -336,7 +369,7 @@ class Bot:
         for gruppo in _per_tipo(regole.annunci_da_fare(stato, fatti)):
             if (sondaggio.id, gruppo) in self._annunci_rifiutati:
                 continue
-            testo = testi.annunci(gruppo, self._roster, self._nome, sondaggio.date)
+            testo = testi.annunci(gruppo, self._roster, self._nome, sondaggio.date, sondaggio.id)
             try:
                 self._invio.scrivi(testo)
             except TelegramRifiuto as e:

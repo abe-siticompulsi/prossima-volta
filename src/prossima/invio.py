@@ -159,6 +159,21 @@ class Invio:
         dopo che Telegram l'ha accettato)."""
         self._invia(self._tg.scrivi, self._gruppo, testo.testo, testo.entita, None, testo.bottoni)
 
+    def rispondi_al_tocco(self, tocco_id: str, avviso: str | None = None) -> None:
+        """Al meglio: un tocco vecchio (dopo un buio) Telegram non lo accetta più,
+        e l'azione del tocco non dipende dalla risposta."""
+        try:
+            self._invia(self._tg.rispondi_al_tocco, tocco_id, avviso)
+        except TelegramError as e:
+            log.warning("risposta al tocco non mandata: %s", e)
+
+    def togli_bottoni(self, messaggio: int) -> None:
+        """Al meglio: un bottone rimasto, toccato, dice che il sondaggio è già chiuso."""
+        try:
+            self._invia(self._tg.togli_bottoni, self._gruppo, messaggio)
+        except TelegramError as e:
+            log.warning("bottoni non tolti dal messaggio %s: %s", messaggio, e)
+
     def ferma(self, sondaggio: Sondaggio) -> Fermato:
         """Ferma il sondaggio su Telegram. Non lo chiude nel database: lo fa chi
         chiama, nella stessa transazione della lettera che lo dice. Un errore
