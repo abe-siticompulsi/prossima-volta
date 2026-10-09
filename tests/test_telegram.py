@@ -50,13 +50,13 @@ def test_io_restituisce_il_nome_del_bot():
     assert viste[0].url.path == f"/bot{TOKEN}/getMe"
 
 
-def test_aggiornamenti_chiede_messaggi_e_voti():
+def test_aggiornamenti_chiede_messaggi_voti_e_tocchi():
     viste, gestore = registra([{"update_id": 5}])
     bot = bot_con(gestore)
     assert bot.aggiornamenti(7, 25) == [{"update_id": 5}]
     assert corpo(viste[0]) == {
         "timeout": 25,
-        "allowed_updates": ["message", "poll_answer"],
+        "allowed_updates": ["message", "poll_answer", "callback_query"],
         "offset": 7,
     }
     assert viste[0].extensions["timeout"]["read"] == 35.0
@@ -231,3 +231,50 @@ def test_una_risposta_non_json():
     with pytest.raises(TelegramError, match="HTTP 502") as errore:
         bot_con(lambda r: httpx.Response(502, text="Bad gateway")).scrivi(1, "x")
     assert not isinstance(errore.value, TelegramRifiuto)
+
+
+def test_scrivi_con_i_bottoni():
+    viste, gestore = registra({"message_id": 44})
+    bottoni = [
+        [("Tieni lunedì", "chiudi:3:13/10"), ("Tieni giovedì", "chiudi:3:16/10")],
+        [("Rimanda alla prossima settimana", "chiudi:3:rimanda")],
+    ]
+    bot_con(gestore).scrivi(-100, "😬 …", bottoni=bottoni)
+    assert corpo(viste[0]) == {
+        "chat_id": -100,
+        "text": "😬 …",
+        "reply_markup": {
+            "inline_keyboard": [
+                [
+                    {"text": "Tieni lunedì", "callback_data": "chiudi:3:13/10"},
+                    {"text": "Tieni giovedì", "callback_data": "chiudi:3:16/10"},
+                ],
+                [{"text": "Rimanda alla prossima settimana", "callback_data": "chiudi:3:rimanda"}],
+            ]
+        },
+    }
+
+
+def test_rispondi_al_tocco_con_e_senza_avviso():
+    viste, gestore = registra(True)
+    bot = bot_con(gestore)
+    bot.rispondi_al_tocco("77")
+    bot.rispondi_al_tocco("78", "Il sondaggio è già chiuso.")
+    assert viste[0].url.path.endswith("/answerCallbackQuery")
+    assert corpo(viste[0]) == {"callback_query_id": "77"}
+    assert corpo(viste[1]) == {
+        "callback_query_id": "78",
+        "text": "Il sondaggio è già chiuso.",
+        "show_alert": True,
+    }
+
+
+def test_togli_bottoni():
+    viste, gestore = registra({"message_id": 44})
+    bot_con(gestore).togli_bottoni(-100, 44)
+    assert viste[0].url.path.endswith("/editMessageReplyMarkup")
+    assert corpo(viste[0]) == {
+        "chat_id": -100,
+        "message_id": 44,
+        "reply_markup": {"inline_keyboard": []},
+    }

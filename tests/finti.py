@@ -24,6 +24,8 @@ API = {
     "aggiornamenti": "getUpdates",
     "manda_sondaggio": "sendPoll",
     "scrivi": "sendMessage",
+    "rispondi_al_tocco": "answerCallbackQuery",
+    "togli_bottoni": "editMessageReplyMarkup",
     "ferma_sondaggio": "stopPoll",
     "registra_comandi": "setMyCommands",
 }
@@ -93,9 +95,11 @@ class TelegramFinto:
         )
         return self._risposta("manda_sondaggio", mandato)
 
-    def scrivi(self, chat_id, testo, entita=(), risposta_a=None):
+    def scrivi(self, chat_id, testo, entita=(), risposta_a=None, bottoni=()):
+        # i bottoni solo se ci sono: le prove confrontano le chiamate intere
+        extra = {"bottoni": [list(riga) for riga in bottoni]} if bottoni else {}
         messaggio = self._registra(
-            "scrivi", chat_id=chat_id, testo=testo, entita=list(entita), risposta_a=risposta_a
+            "scrivi", chat_id=chat_id, testo=testo, entita=list(entita), risposta_a=risposta_a, **extra
         )
         return self._risposta(
             "scrivi", {"message_id": messaggio, "chat": {"id": chat_id}, "text": testo}
@@ -112,6 +116,14 @@ class TelegramFinto:
         self.fermati.add(messaggio)
         conteggi = list(self.conteggi.get(messaggio, [0] * len(sondaggio["opzioni"])))
         return self._risposta("ferma_sondaggio", conteggi)
+
+    def rispondi_al_tocco(self, tocco_id, avviso=None):
+        self._registra("rispondi_al_tocco", tocco_id=tocco_id, avviso=avviso)
+        return self._risposta("rispondi_al_tocco", None)
+
+    def togli_bottoni(self, chat_id, messaggio):
+        self._registra("togli_bottoni", chat_id=chat_id, messaggio=messaggio)
+        return self._risposta("togli_bottoni", None)
 
     def registra_comandi(self, comandi):
         self._registra("registra_comandi", comandi=list(comandi))

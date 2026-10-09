@@ -111,7 +111,10 @@ class BotTelegram:
         return self._chiama("getMe")["username"]
 
     def aggiornamenti(self, offset: int | None, attesa: int) -> list[dict]:
-        corpo: dict[str, Any] = {"timeout": attesa, "allowed_updates": ["message", "poll_answer"]}
+        corpo: dict[str, Any] = {
+            "timeout": attesa,
+            "allowed_updates": ["message", "poll_answer", "callback_query"],
+        }
         if offset is not None:
             corpo["offset"] = offset
         return self._chiama("getUpdates", corpo, timeout=attesa + 10.0)
@@ -139,11 +142,21 @@ class BotTelegram:
         testo: str,
         entita: Sequence[dict] = (),
         risposta_a: int | None = None,
+        bottoni: Sequence[Sequence[tuple[str, str]]] = (),
     ) -> dict:
-        """Il messaggio come l'ha registrato Telegram, entità comprese."""
+        """Il messaggio come l'ha registrato Telegram, entità comprese.
+        `bottoni`: righe di (etichetta, dato) per una inline keyboard; toccare un
+        bottone manda al bot un `callback_query` con quel dato."""
         corpo: dict[str, Any] = {"chat_id": chat_id, "text": testo}
         if entita:
             corpo["entities"] = list(entita)
+        if bottoni:
+            corpo["reply_markup"] = {
+                "inline_keyboard": [
+                    [{"text": etichetta, "callback_data": dato} for etichetta, dato in riga]
+                    for riga in bottoni
+                ]
+            }
         if risposta_a is not None:
             # Se il messaggio a cui si risponde non c'è più, il messaggio parte lo stesso.
             corpo["reply_parameters"] = {
@@ -151,6 +164,21 @@ class BotTelegram:
                 "allow_sending_without_reply": True,
             }
         return self._chiama("sendMessage", corpo, timeout=SCRITTURA)
+
+    def rispondi_al_tocco(self, tocco_id: str, avviso: str | None = None) -> None:
+        """La risposta a un tocco su un bottone: senza `avviso` non si vede niente;
+        con, un avviso solo per chi ha toccato."""
+        corpo: dict[str, Any] = {"callback_query_id": tocco_id}
+        if avviso is not None:
+            corpo.update(text=avviso, show_alert=True)
+        self._chiama("answerCallbackQuery", corpo, timeout=SCRITTURA)
+
+    def togli_bottoni(self, chat_id: int, messaggio: int) -> None:
+        self._chiama(
+            "editMessageReplyMarkup",
+            {"chat_id": chat_id, "message_id": messaggio, "reply_markup": {"inline_keyboard": []}},
+            timeout=SCRITTURA,
+        )
 
     def ferma_sondaggio(self, chat_id: int, messaggio: int) -> list[int]:
         """Ferma il sondaggio e restituisce i conteggi per opzione, nell'ordine

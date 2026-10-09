@@ -20,7 +20,14 @@ def firma(funzione):
 def test_il_finto_ha_i_metodi_del_client_vero_con_gli_stessi_argomenti():
     pubblici = [nome for nome in vars(BotTelegram) if not nome.startswith("_")]
     assert pubblici == [
-        "io", "aggiornamenti", "manda_sondaggio", "scrivi", "ferma_sondaggio", "registra_comandi",
+        "io",
+        "aggiornamenti",
+        "manda_sondaggio",
+        "scrivi",
+        "rispondi_al_tocco",
+        "togli_bottoni",
+        "ferma_sondaggio",
+        "registra_comandi",
     ]
     for nome in pubblici:
         assert firma(getattr(TelegramFinto, nome)) == firma(getattr(BotTelegram, nome)), nome
@@ -104,3 +111,16 @@ def test_uccidi_rimette_solo_il_metodo_ucciso(uccidi, monkeypatch, telegram, sto
     uccidi.basta()
     assert store.posta() == []
     assert telegram.nome == "UnAltroBot"
+
+
+def test_il_finto_registra_i_bottoni_solo_se_ci_sono():
+    telegram = TelegramFinto()
+    telegram.scrivi(-100, "senza")
+    telegram.scrivi(-100, "con", bottoni=[[("Rimanda", "chiudi:1:rimanda")]])
+    senza, con = telegram.di_tipo("scrivi")
+    assert "bottoni" not in senza
+    assert con["bottoni"] == [[("Rimanda", "chiudi:1:rimanda")]]
+    telegram.rispondi_al_tocco("77", "avviso")
+    telegram.togli_bottoni(-100, 2)
+    assert telegram.di_tipo("rispondi_al_tocco") == [{"tocco_id": "77", "avviso": "avviso"}]
+    assert telegram.di_tipo("togli_bottoni") == [{"chat_id": -100, "messaggio": 2}]
