@@ -100,7 +100,7 @@ class Chiusure:
             return  # lo stesso /chiudi letto una seconda volta dopo un riavvio
         chi = self._roster.per_id(messaggio.get("from", {}).get("id"))
         if chi is None or not chi.chiude:
-            self._invio.accoda(testi.solo_chi_chiude(self._roster.chi_chiude), risposta_a=comando)
+            self._invio.accoda(testi.solo_chi_chiude(self._roster), risposta_a=comando)
             return
         # il sondaggio fermato dalla ripresa, che aspetta di essere riaperto,
         # si chiude come se fosse aperto: vince il comando di chi chiude

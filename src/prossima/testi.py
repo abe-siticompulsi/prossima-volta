@@ -69,21 +69,23 @@ class _Scrittura:
         return self
 
     def menzione(self, persona: Persona) -> _Scrittura:
+        scritto = nome(persona)
         self._entita.append(
             {
                 "type": "text_mention",
                 "offset": self._lunghezza,
-                "length": utf16(persona.soprannome),
+                "length": utf16(scritto),
                 "user": {"id": persona.telegram_id},
             }
         )
-        return self.testo(persona.soprannome)
+        return self.testo(scritto)
 
-    def menzioni(self, persone: Sequence[Persona]) -> _Scrittura:
-        """«sese, pippo»: un nome per menzione, separati da virgole."""
+    def menzioni(self, persone: Sequence[Persona], ultima: str = ", ") -> _Scrittura:
+        """«Sese, Pippo»: un nome per menzione, separati da virgole; con
+        `ultima=" e "`, «Sese e Pippo»."""
         for i, persona in enumerate(persone):
             if i:
-                self.testo(", ")
+                self.testo(ultima if i == len(persone) - 1 else ", ")
             self.menzione(persona)
         return self
 
@@ -98,8 +100,50 @@ def elenco(nomi: Sequence[str], congiunzione: str = "e") -> str:
     return f"{', '.join(nomi[:-1])} {congiunzione} {nomi[-1]}"
 
 
+def nome(persona: Persona) -> str:
+    """Il soprannome con l'iniziale maiuscola: «gio» → «Gio»."""
+    return persona.soprannome[:1].upper() + persona.soprannome[1:]
+
+
 def _nomi(persone: Sequence[Persona]) -> list[str]:
-    return [p.soprannome for p in persone]
+    return [nome(p) for p in persone]
+
+
+def _maiuscola(testo: str) -> str:
+    return testo[:1].upper() + testo[1:]
+
+
+# --- le date dette a parole (§3.5)
+
+
+def una_settimana(date_sondaggio: Sequence[date]) -> bool:
+    """Tutte le date nella stessa settimana di calendario, da lunedì a domenica."""
+    return len({regole.lunedi(g) for g in date_sondaggio}) <= 1
+
+
+def giorno_detto(giorno: date, solo_il_giorno: bool) -> str:
+    """«martedì», o «martedì 13» se il sondaggio non sta in una settimana."""
+    intero = regole.GIORNI_INTERI[giorno.weekday()]
+    return intero if solo_il_giorno else f"{intero} {giorno.day}"
+
+
+def date_dette(giorni: Sequence[date], solo_il_giorno: bool) -> str:
+    """«lunedì e giovedì», nell'ordine del calendario."""
+    return elenco([giorno_detto(g, solo_il_giorno) for g in sorted(giorni)])
+
+
+def chi_chiude(roster: regole.Roster) -> str:
+    """«chiude Gio (o Abe, in emergenza)»: il master, e chi può chiudere quando
+    il master non c'è. Se il master non può chiudere, chi può."""
+    master = roster.master
+    if not master.chiude:
+        chiudono = roster.chi_chiude
+        verbo = "chiude" if len(chiudono) == 1 else "chiudono"
+        return f"{verbo} {elenco(_nomi(chiudono))}"
+    altri = [p for p in roster.chi_chiude if p != master]
+    if not altri:
+        return f"chiude {nome(master)}"
+    return f"chiude {nome(master)} (o {elenco(_nomi(altri), 'o')}, in emergenza)"
 
 
 # --- il sondaggio
@@ -121,60 +165,81 @@ def scegli_frase(
 # --- gli annunci
 
 
-def quasi(a: regole.Quasi) -> Testo:
-    s = _Scrittura().testo(
-        f"📅 {regole.etichetta(a.giorno)}: ci sono {elenco(_nomi(a.presenti))}, manca un giocatore."
-    )
-    if a.senza_voto:
-        s.testo(" Non hanno ancora votato: ").menzioni(a.senza_voto).testo(".")
-    return s.fatto()
+def annunci(
+    gruppo: Sequence[regole.Annuncio],
+    roster: regole.Roster,
+    nome_bot: str,
+    date_sondaggio: Sequence[date],
+) -> Testo:
+    """Un messaggio per un gruppo di annunci dello stesso tipo, nell'ordine
+    delle date (§3.5). Le date si dicono per giorno se il sondaggio sta in una
+    settimana: `date_sondaggio` sono tutte le sue date."""
+    solo_il_giorno = una_settimana(date_sondaggio)
+    giorni = [a.giorno for a in gruppo if not isinstance(a, regole.Impossibile)]
+    match gruppo[0]:
+        case regole.Quasi(senza_voto=senza_voto):
+            domanda = "ci sei?" if len(senza_voto) == 1 else "ci siete?"
+            return (
+                _Scrittura()
+                .testo(f"{_maiuscola(date_dette(giorni, solo_il_giorno))} ci siamo quasi. ")
+                .menzioni(senza_voto, " e ")
+                .testo(f", {domanda}")
+                .fatto()
+            )
+        case regole.Possibile():
+            return Testo(f"✅ {_maiuscola(date_dette(giorni, solo_il_giorno))} si può fare!")
+        case regole.NonPiu():
+            return _non_piu(gruppo, roster, giorni, solo_il_giorno)
+        case regole.Impossibile() as a:
+            return _impossibile(a, roster, nome_bot, solo_il_giorno)
+    raise TypeError(f"annuncio sconosciuto: {gruppo[0]!r}")
 
 
-def possibile(a: regole.Possibile) -> Testo:
-    return Testo(f"✅ {regole.etichetta(a.giorno)} va bene: ci sono {elenco(_nomi(a.presenti))}.")
+def _non_piu(
+    gruppo: Sequence[regole.Annuncio],
+    roster: regole.Roster,
+    giorni: Sequence[date],
+    solo_il_giorno: bool,
+) -> Testo:
+    """I nomi solo se il bot sa chi se n'è andato per tutte le date (dopo una
+    ripresa non lo sa); ognuno una volta, nell'ordine del roster. Domenica è
+    femminile."""
+    femminile = all(g.weekday() == 6 for g in giorni)
+    if len(giorni) == 1:
+        saltato = "è saltata" if femminile else "è saltato"
+    else:
+        saltato = "sono saltate" if femminile else "sono saltati"
+    inizio = f"{_maiuscola(date_dette(giorni, solo_il_giorno))} {saltato}"
+    andati_via = [a.andati_via for a in gruppo if isinstance(a, regole.NonPiu)]
+    if not all(andati_via):
+        return Testo(f"{inizio}.")
+    andati = {p.telegram_id for persone in andati_via for p in persone}
+    persone = [p for p in roster.persone if p.telegram_id in andati]
+    verbo = "non può più" if len(persone) == 1 else "non possono più"
+    return Testo(f"{inizio}, {elenco(_nomi(persone))} {verbo}.")
 
 
-def non_piu(a: regole.NonPiu) -> Testo:
-    inizio = f"⚠️ {regole.etichetta(a.giorno)} non va più bene: "
-    if not a.andati_via:
-        return Testo(inizio + "non ci sono più il master e quattro giocatori.")
-    verbo = "ha" if len(a.andati_via) == 1 else "hanno"
-    return Testo(f"{inizio}{elenco(_nomi(a.andati_via))} {verbo} tolto il voto.")
-
-
-def impossibile(a: regole.Impossibile, chiude: Sequence[Persona], nome_bot: str) -> Testo:
+def _impossibile(
+    a: regole.Impossibile, roster: regole.Roster, nome_bot: str, solo_il_giorno: bool
+) -> Testo:
+    """Menziona il master, che decide; se il master non può chiudere, chi può."""
+    chi = (roster.master,) if roster.master.chiude else roster.chi_chiude
+    rimanda = f"/chiudi@{nome_bot} rimanda per rimandare alla prossima settimana."
     s = _Scrittura()
     if a.con_tre:
-        date_ = "; ".join(f"{regole.etichetta(g)} ({', '.join(_nomi(p))})" for g, p in a.con_tre)
+        giorni = [g for g, _ in a.con_tre]
+        tenere = "per tenerla" if len(giorni) == 1 else "per tenerne una"
         s.testo(
-            "😬 Con quattro giocatori non ci si sta in nessuna di queste date. "
-            f"Con tre: {date_}. "
+            "😬 Con i voti attuali non ci sono date con quattro giocatori. "
+            f"Con tre: {date_dette(giorni, solo_il_giorno)}. "
         )
-        s.menzioni(chiude).testo(
-            f": /chiudi@{nome_bot} {regole.breve(a.con_tre[0][0])} per tenerla, "
-            f"/chiudi@{nome_bot} rimanda per rifare il sondaggio sulla settimana dopo."
+        s.menzioni(chi, " e ").testo(
+            f": /chiudi@{nome_bot} {regole.breve(giorni[0])} {tenere}, {rimanda}"
         )
     else:
-        s.testo(
-            "😬 Con quattro giocatori non ci si sta in nessuna di queste date, e nemmeno con tre. "
-        )
-        s.menzioni(chiude).testo(
-            f": /chiudi@{nome_bot} rimanda per rifare il sondaggio sulla settimana dopo."
-        )
+        s.testo("😬 Con i voti attuali non ci sono date con quattro giocatori, e nemmeno con tre. ")
+        s.menzioni(chi, " e ").testo(f": {rimanda}")
     return s.fatto()
-
-
-def annuncio(a: regole.Annuncio, roster: regole.Roster, nome_bot: str) -> Testo:
-    match a:
-        case regole.Quasi():
-            return quasi(a)
-        case regole.Possibile():
-            return possibile(a)
-        case regole.NonPiu():
-            return non_piu(a)
-        case regole.Impossibile():
-            return impossibile(a, roster.chi_chiude, nome_bot)
-    raise TypeError(f"annuncio sconosciuto: {a!r}")
 
 
 # --- le risposte ai comandi
@@ -263,8 +328,8 @@ def voto_sconosciuto(
     )
 
 
-def solo_chi_chiude(chiude: Sequence[Persona]) -> Testo:
-    return Testo(f"Il sondaggio lo chiudono {elenco(_nomi(chiude), 'o')}.")
+def solo_chi_chiude(roster: regole.Roster) -> Testo:
+    return Testo(f"Il sondaggio lo {chi_chiude(roster)}.")
 
 
 def nessun_sondaggio() -> Testo:

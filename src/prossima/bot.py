@@ -48,6 +48,8 @@ from .telegram import MASSIMO_AGGIORNAMENTI, TelegramError, TelegramRifiuto
 log = logging.getLogger(__name__)
 
 COMANDI = (("sondaggio", "Sondaggio per la prossima volta"), ("chiudi", "Chiude il sondaggio"))
+# Gli annunci aspettano che i voti si assestino (spec §3.5).
+ATTESA_ANNUNCI = timedelta(minutes=2)
 # Un voto per un sondaggio sconosciuto si dice nel gruppo solo se un sondaggio
 # non confermato da Telegram è di questi ultimi giorni.
 NON_CONFERMATO_DI_RECENTE = timedelta(days=7)
@@ -68,6 +70,7 @@ class Bot:
         frasi: Sequence[str] = testi.FRASI_NESSUNA,
         domanda: str = testi.DOMANDA,
         giorni: Sequence[int] = regole.GIORNI_DI_SEMPRE,
+        attesa_annunci: timedelta = ATTESA_ANNUNCI,
     ) -> None:
         self._store = store
         self._roster = roster
@@ -75,6 +78,9 @@ class Bot:
         self._nome = nome
         self._fuso = fuso
         self._giorni = tuple(giorni)
+        self._attesa_annunci = attesa_annunci
+        # In memoria: dopo un riavvio gli annunci dovuti partono subito.
+        self._ultimo_voto: datetime | None = None
         self._adesso = adesso
         self._invio = Invio(
             telegram=telegram,
@@ -99,7 +105,7 @@ class Bot:
         )
         # Gli annunci che Telegram ha rifiutato (4xx) in questo processo, già
         # scritti nel log: si saltano fino al prossimo avvio.
-        self._annunci_rifiutati: set[tuple[int, regole.Annuncio]] = set()
+        self._annunci_rifiutati: set[tuple[int, tuple[regole.Annuncio, ...]]] = set()
         # La prima lettura dopo il buio, se il suo lotto era pieno: la ripresa
         # aspetta di aver gestito gli arretrati, ma il buio è finito lì.
         self._fine_del_buio: datetime | None = None
@@ -241,6 +247,7 @@ class Bot:
                 return
             voto = regole.voto_da_opzioni(sondaggio.date, opzioni)
             self._store.registra_voto(sondaggio.id, utente["id"], poll_id, voto, self._adesso())
+            self._ultimo_voto = self._adesso()
         elif fermo is not None and poll_id == fermo.poll_id:
             # dato poco prima dello stop, arrivato mentre la riapertura aspetta: si
             # tiene, come gli altri voti, per il sondaggio riaperto
@@ -248,6 +255,7 @@ class Bot:
                 return
             voto = regole.voto_da_opzioni(fermo.date, opzioni)
             self._store.registra_voto(fermo.id, utente["id"], poll_id, voto, self._adesso())
+            self._ultimo_voto = self._adesso()
         elif sondaggio is not None and sondaggio.poll_prima is not None and poll_id == sondaggio.poll_prima:
             # Dato nel sondaggio di prima della ripresa, poco prima dello stop, e
             # arrivato dopo la riapertura: vale se la persona non ha votato nel
@@ -258,6 +266,7 @@ class Bot:
             self._store.registra_voto_tardivo(
                 sondaggio.id, utente["id"], poll_id, voto, self._adesso(), sondaggio.poll_id
             )
+            self._ultimo_voto = self._adesso()
         elif not self._store.poll_conosciuto(poll_id):
             self._voto_sconosciuto(poll_id)
         # un voto per un sondaggio che il bot conosce, ma non è aperto: si ignora
@@ -297,24 +306,30 @@ class Bot:
             # con la chiusura in sospeso la decisione di chiudere è presa: un
             # annuncio nuovo la contraddirebbe
             return
+        if (
+            self._ultimo_voto is not None
+            and self._adesso() - self._ultimo_voto < self._attesa_annunci
+        ):
+            return  # i voti non si sono ancora assestati: si dice com'è dopo
         stato = self._stato(sondaggio)
         fatti = self._store.fatti(sondaggio.id)
         if regole.rientrato(stato, fatti):
             fatti = regole.dopo(fatti, regole.Rientro())
             self._store.salva_fatti(sondaggio.id, fatti)
-        for annuncio in regole.annunci_da_fare(stato, fatti):
-            if (sondaggio.id, annuncio) in self._annunci_rifiutati:
+        for gruppo in _per_tipo(regole.annunci_da_fare(stato, fatti)):
+            if (sondaggio.id, gruppo) in self._annunci_rifiutati:
                 continue
-            testo = testi.annuncio(annuncio, self._roster, self._nome)
+            testo = testi.annunci(gruppo, self._roster, self._nome, sondaggio.date)
             try:
                 self._invio.scrivi(testo)
             except TelegramRifiuto as e:
                 # non è fatto, e lo stesso testo avrebbe lo stesso rifiuto: si
                 # salta fino al prossimo avvio; gli altri partono
                 log.error("annuncio rifiutato da Telegram: %s (%r)", e, testo.testo)
-                self._annunci_rifiutati.add((sondaggio.id, annuncio))
+                self._annunci_rifiutati.add((sondaggio.id, gruppo))
                 continue
-            fatti = regole.dopo(fatti, annuncio)
+            for annuncio in gruppo:
+                fatti = regole.dopo(fatti, annuncio)
             self._store.salva_fatti(sondaggio.id, fatti)
 
     # --- i pezzi
@@ -336,3 +351,15 @@ class Bot:
         oggi = self._oggi()
         future = tuple(g for g in sondaggio.date if g >= oggi)
         return regole.Stato(self._roster, future, self._store.voti(sondaggio.id))
+
+
+def _per_tipo(annunci: Sequence[regole.Annuncio]) -> list[tuple[regole.Annuncio, ...]]:
+    """Gli annunci dello stesso tipo, insieme: `annunci_da_fare` li dà già in
+    ordine di tipo, quindi bastano quelli consecutivi."""
+    gruppi: list[list[regole.Annuncio]] = []
+    for annuncio in annunci:
+        if gruppi and type(gruppi[-1][0]) is type(annuncio):
+            gruppi[-1].append(annuncio)
+        else:
+            gruppi.append([annuncio])
+    return [tuple(g) for g in gruppi]

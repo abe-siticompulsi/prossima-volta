@@ -33,7 +33,7 @@ def test_solo_chi_chiude(bot, telegram, store, aperto):
     assert telegram.di_tipo("scrivi") == [
         {
             "chat_id": GRUPPO,
-            "testo": "Il sondaggio lo chiudono gio o abe.",
+            "testo": "Il sondaggio lo chiude Gio (o Abe, in emergenza).",
             "entita": [],
             "risposta_a": da_emi["message"]["message_id"],
         }
@@ -46,7 +46,7 @@ def test_chi_non_e_nel_roster_non_chiude(bot, telegram, store, aperto):
     da_estraneo = comando("/chiudi", da=ESTRANEO)
     bot.ricevi([da_estraneo])
     assert [(a["testo"], a["risposta_a"]) for a in telegram.di_tipo("scrivi")] == [
-        ("Il sondaggio lo chiudono gio o abe.", da_estraneo["message"]["message_id"])
+        ("Il sondaggio lo chiude Gio (o Abe, in emergenza).", da_estraneo["message"]["message_id"])
     ]
     assert store.sondaggio_aperto() == aperto
 
@@ -650,7 +650,7 @@ def test_con_la_chiusura_in_sospeso_chi_non_chiude_non_cambia_niente(bot, telegr
     bot.ricevi([chiudi, comando("/chiudi rimanda", da=EMI.telegram_id), comando("/chiudi boh")])
     assert store.chiusura_sospesa().comando == chiudi["message"]["message_id"]
     assert telegram.scritti()[1:] == [
-        "Il sondaggio lo chiudono gio o abe.",
+        "Il sondaggio lo chiude Gio (o Abe, in emergenza).",
         "Non capisco «boh»: scrivi una data del sondaggio (14/10), il suo giorno (mar) o rimanda.",
     ]
 

@@ -23,8 +23,8 @@ DIVERSI = (
     "qualcuno ha votato o cambiato voto senza che lo sapessi."
 )
 RIAPRO = (
-    "Riapro il sondaggio. Ho già i voti di abe, emi e sem: se non avete cambiato idea, "
-    "non serve rivotare. Non hanno ancora votato: gio, sese, pippo."
+    "Riapro il sondaggio. Ho già i voti di Abe, Emi e Sem: se non avete cambiato idea, "
+    "non serve rivotare. Non hanno ancora votato: Gio, Sese, Pippo."
 )
 GIA_CHIUSO = "Il sondaggio risultava già chiuso."
 GIA_CHIUSO_SENZA_CONFRONTO = "Il sondaggio risultava già chiuso: non posso confrontare i conteggi."
@@ -257,16 +257,15 @@ def test_gli_annunci_fatti_restano_e_dopo_la_ripresa_non_si_sa_chi(bot, telegram
     bot.ricevi([comando("/sondaggio mar gio")])
     for persona in (GIO, ABE, EMI, SEM, SESE):
         vota(bot, telegram, persona, "14/10")
-    possibile = "✅ mar 14/10 va bene: ci sono gio, abe, emi, sem e sese."
+    possibile = "✅ Martedì si può fare!"
     assert possibile in telegram.scritti()
     telegram.conteggi[store.sondaggio_aperto().messaggio] = [5, 0, 0]
     dopo_il_buio(bot, orologio)
     assert telegram.scritti().count(possibile) == 1
     vota(bot, telegram, SEM, "nessuna")
     # il «quasi» del 14/10 era già stato detto prima del «possibile»: non si ripete
-    assert telegram.scritti()[-1] == (
-        "⚠️ mar 14/10 non va più bene: non ci sono più il master e quattro giocatori."
-    )
+    # dopo la ripresa il bot non sa più chi c'era: niente nomi
+    assert telegram.scritti()[-1] == "Martedì è saltato."
 
 
 def avvisi(caplog):
@@ -494,8 +493,8 @@ def test_i_voti_al_sondaggio_fermato_mentre_la_riapertura_aspetta_si_tengono(
     orologio.avanza(minutes=10)  # dopo un errore di rete la riapertura aspetta 10 minuti
     bot.ricevi([])
     assert telegram.scritti()[-1] == (
-        "Riapro il sondaggio. Ho già i voti di gio, abe, emi e sem: se non avete cambiato idea, "
-        "non serve rivotare. Non hanno ancora votato: sese, pippo."
+        "Riapro il sondaggio. Ho già i voti di Gio, Abe, Emi e Sem: se non avete cambiato idea, "
+        "non serve rivotare. Non hanno ancora votato: Sese, Pippo."
     )
     assert store.voti(vecchio.id)[GIO.telegram_id] == Voto(frozenset({d("14/10")}))
 
@@ -727,8 +726,8 @@ def test_dopo_il_buio_con_un_lotto_pieno_la_ripresa_aspetta_il_lotto_seguente(
     assert telegram.scritti() == [
         BUIO,
         UGUALI,
-        "Riapro il sondaggio. Ho già i voti di gio, abe, emi e sem: se non avete cambiato idea, "
-        "non serve rivotare. Non hanno ancora votato: sese, pippo.",
+        "Riapro il sondaggio. Ho già i voti di Gio, Abe, Emi e Sem: se non avete cambiato idea, "
+        "non serve rivotare. Non hanno ancora votato: Sese, Pippo.",
     ]
     assert store.ripresa() is None
 

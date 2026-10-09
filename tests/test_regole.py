@@ -200,11 +200,9 @@ CON_TRE = dict(gio="14/10", abe="14/10", emi="14/10", sem="14/10 16/10", sese="1
 
 
 def test_impossibile_con_le_date_in_cui_si_gioca_in_tre():
+    # hanno votato tutti: il «quasi» del 14/10 non ha nessuno da chiamare
     annunci = regole.annunci_da_fare(stato(**CON_TRE), Fatti())
-    assert annunci == [
-        Quasi(d("14/10"), (GIO, ABE, EMI, SEM), ()),
-        Impossibile(((d("14/10"), (GIO, ABE, EMI, SEM)),)),
-    ]
+    assert annunci == [Impossibile(((d("14/10"), (GIO, ABE, EMI, SEM)),))]
 
 
 def test_impossibile_senza_date_in_tre_compreso_il_master_che_vota_solo_nessuna():
@@ -262,3 +260,35 @@ def test_il_buio_comincia_dopo_23_ore():
     assert not regole.al_buio(None, prima)
     assert not regole.al_buio(prima, prima + timedelta(hours=23))
     assert regole.al_buio(prima, prima + timedelta(hours=23, seconds=1))
+
+
+def test_quasi_solo_se_qualcuno_non_ha_votato():
+    """Hanno votato tutti: il 14/10 è quasi, ma non c'è nessuno da chiamare (e
+    con tutti i voti nessuna data può più arrivare a quattro: «impossibile»)."""
+    s = stato(gio="14/10", abe="14/10", emi="14/10", sem="14/10", sese="16/10", pippo="16/10")
+    assert [type(a) for a in regole.annunci_da_fare(s, Fatti())] == [Impossibile]
+
+
+def test_quasi_non_con_una_data_possibile():
+    s = stato(gio="14/10 16/10", abe="14/10 16/10", emi="14/10 16/10", sem="14/10 16/10", sese="14/10")
+    assert [type(a) for a in regole.annunci_da_fare(s, Fatti())] == [Possibile]
+
+
+def test_il_quasi_non_annunciato_resta_da_annunciare():
+    """Con una data possibile il «quasi» tace; se quella data salta, torna."""
+    gli_altri = dict(gio="14/10 16/10", abe="14/10 16/10", emi="14/10 16/10", sem="14/10 16/10")
+    s = stato(**gli_altri, sese="14/10")
+    fatti = regole.dopo(Fatti(), Possibile(d("14/10"), s.presenti(d("14/10"))))
+    assert regole.annunci_da_fare(s, fatti) == []
+    dopo = stato(**gli_altri, sese="nessuna")
+    assert [type(a) for a in regole.annunci_da_fare(dopo, fatti)] == [NonPiu, Quasi, Quasi]
+
+
+def test_gli_annunci_per_tipo():
+    """Prima i «non più», poi i «possibile», poi i «quasi», e «impossibile» in
+    fondo; dentro ogni tipo, nell'ordine delle date."""
+    c_erano = frozenset(p.telegram_id for p in (GIO, ABE, EMI, SEM, SESE))
+    fatti = Fatti(possibili={d("16/10"): c_erano})
+    # il 14/10 è quasi, il 16/10 non è più possibile: per data sarebbe il contrario
+    s = stato("14/10 16/10 17/10", gio="14/10 16/10", abe="14/10 16/10", emi="14/10 16/10", sem="14/10")
+    assert [type(a) for a in regole.annunci_da_fare(s, fatti)] == [NonPiu, Quasi]

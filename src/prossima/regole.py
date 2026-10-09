@@ -483,25 +483,33 @@ def dopo(fatti: Fatti, evento: Evento) -> Fatti:
 
 
 def annunci_da_fare(stato: Stato, fatti: Fatti) -> list[Annuncio]:
-    """Gli annunci che lo stato chiede e che non sono ancora stati fatti, data
-    per data e con «impossibile» in fondo. Pura: rifarla non ripete niente.
+    """Gli annunci che lo stato chiede e che non sono ancora stati fatti: prima
+    i «non più», poi i «possibile», poi i «quasi», ognuno nell'ordine delle
+    date, e «impossibile» in fondo. Pura: rifarla non ripete niente.
+
+    Un «quasi» si annuncia solo se qualcuno del roster non ha ancora votato (il
+    messaggio serve a chiamarlo) e se nessuna data è possibile adesso; se no
+    resta da annunciare, e lo sarà se le condizioni cambiano.
 
     Lo stato ha solo le date ancora in gioco, da oggi in poi (v.
     `Bot._stato`): una data annunciata come possibile che non è fra le sue è
     passata. Se nessuno l'ha ritirata con un «non più possibile», «impossibile»
     non si annuncia: probabilmente quel giorno si è giocato, e «nessuna di
     queste date» sarebbe falso."""
-    annunci: list[Annuncio] = []
-    for giorno in stato.date:
-        c = conta(stato, giorno)
-        if giorno in fatti.possibili and not c.possibile:
-            annunci.append(NonPiu(giorno, _andati_via(stato, fatti.possibili[giorno], c)))
-        if c.possibile and giorno not in fatti.possibili:
-            annunci.append(Possibile(giorno, c.presenti))
-        if c.quasi and giorno not in fatti.quasi:
-            annunci.append(Quasi(giorno, c.presenti, stato.senza_voto))
+    conteggi = [conta(stato, g) for g in stato.date]
+    possibile_adesso = any(c.possibile for c in conteggi)
+    non_piu: list[Annuncio] = []
+    nuove: list[Annuncio] = []
+    quasi: list[Annuncio] = []
+    for c in conteggi:
+        if c.giorno in fatti.possibili and not c.possibile:
+            non_piu.append(NonPiu(c.giorno, _andati_via(stato, fatti.possibili[c.giorno], c)))
+        if c.possibile and c.giorno not in fatti.possibili:
+            nuove.append(Possibile(c.giorno, c.presenti))
+        if c.quasi and c.giorno not in fatti.quasi and stato.senza_voto and not possibile_adesso:
+            quasi.append(Quasi(c.giorno, c.presenti, stato.senza_voto))
+    annunci = [*non_piu, *nuove, *quasi]
     if impossibile(stato) and not fatti.impossibile and not _possibile_passata(stato, fatti):
-        conteggi = [conta(stato, g) for g in stato.date]
         annunci.append(Impossibile(tuple((c.giorno, c.presenti) for c in conteggi if c.con_tre)))
     return annunci
 

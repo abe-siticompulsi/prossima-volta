@@ -1,11 +1,12 @@
 import random
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
 
 from prossima import regole, testi
-from prossima.regole import Persona
+from prossima.regole import Persona, Roster
 from tests.tavolo import ABE, EMI, GIO, PIPPO, ROSTER, SEM, SESE, d
 
 NOME = "ProssimaVoltaBot"
@@ -38,16 +39,23 @@ def test_le_opzioni_del_sondaggio():
     assert testi.DOMANDA == "Prossima volta?"
 
 
-def test_quasi_con_le_menzioni_dopo_un_emoji():
-    t = testi.quasi(regole.Quasi(d("14/10"), (GIO, ABE, EMI, SEM), (SESE, PIPPO)))
-    assert t.testo == (
-        "📅 mar 14/10: ci sono gio, abe, emi e sem, manca un giocatore. "
-        "Non hanno ancora votato: sese, pippo."
-    )
-    assert menzionati(t) == [("sese", SESE.telegram_id), ("pippo", PIPPO.telegram_id)]
+SETTIMANA_PROVE = [d("13/10") + timedelta(days=i) for i in range(7)]
+DUE_SETTIMANE = [*SETTIMANA_PROVE, d("20/10")]
+
+
+def test_quasi():
+    gruppo = [regole.Quasi(d("14/10"), (GIO, ABE, EMI, SEM), (PIPPO,))]
+    t = testi.annunci(gruppo, ROSTER, NOME, SETTIMANA_PROVE)
+    assert t.testo == "Martedì ci siamo quasi. Pippo, ci sei?"
+    assert menzionati(t) == [("Pippo", PIPPO.telegram_id)]
     assert all(e["type"] == "text_mention" for e in t.entita)
-    # 📅 vale due unità: contando i caratteri la menzione cadrebbe una lettera prima
-    assert t.entita[0]["offset"] == t.testo.index("sese") + 1
+
+
+def test_quasi_accorpato_con_piu_persone():
+    gruppo = [regole.Quasi(d(g), (GIO, ABE, EMI, SEM), (SESE, PIPPO)) for g in ("13/10", "16/10")]
+    t = testi.annunci(gruppo, ROSTER, NOME, DUE_SETTIMANE)
+    assert t.testo == "Lunedì 13 e giovedì 16 ci siamo quasi. Sese e Pippo, ci siete?"
+    assert menzionati(t) == [("Sese", SESE.telegram_id), ("Pippo", PIPPO.telegram_id)]
 
 
 # Un soprannome non ASCII con un'emoji: 5 caratteri, 6 unità UTF-16 (🎲 ne vale due).
@@ -55,88 +63,83 @@ SESE_DADO = Persona("sèsè🎲", SESE.telegram_id, "giocatore")
 
 
 def test_le_menzioni_contano_in_utf16_anche_con_un_soprannome_non_ascii():
-    t = testi.quasi(regole.Quasi(d("14/10"), (GIO, ABE, EMI, SEM), (SESE_DADO, PIPPO)))
-    assert menzionati(t) == [("sèsè🎲", SESE.telegram_id), ("pippo", PIPPO.telegram_id)]
+    gruppo = [regole.Quasi(d("14/10"), (GIO, ABE, EMI, SEM), (SESE_DADO, PIPPO))]
+    t = testi.annunci(gruppo, ROSTER, NOME, SETTIMANA_PROVE)
+    assert menzionati(t) == [("Sèsè🎲", SESE.telegram_id), ("Pippo", PIPPO.telegram_id)]
     # la lunghezza è quella di Telegram, non quella di `len()`...
     assert [e["length"] for e in t.entita] == [6, 5]
     assert len(SESE_DADO.soprannome) == 5
-    # ...e la seconda menzione comincia dopo la prima, la virgola e lo spazio
-    assert t.entita[1]["offset"] == t.entita[0]["offset"] + 6 + 2
+    # ...e la seconda menzione comincia dopo la prima e « e »
+    assert t.entita[1]["offset"] == t.entita[0]["offset"] + 6 + 3
 
 
 def test_riapro_conta_le_menzioni_in_utf16_dopo_un_soprannome_non_ascii():
     t = testi.riapro((ABE,), (SESE_DADO, PIPPO))
-    assert menzionati(t) == [("sèsè🎲", SESE.telegram_id), ("pippo", PIPPO.telegram_id)]
+    assert menzionati(t) == [("Sèsè🎲", SESE.telegram_id), ("Pippo", PIPPO.telegram_id)]
     assert [e["length"] for e in t.entita] == [6, 5]
 
 
-def test_quasi_quando_hanno_votato_tutti():
-    t = testi.quasi(regole.Quasi(d("14/10"), (GIO, ABE, EMI, SEM), ()))
-    assert t == testi.Testo("📅 mar 14/10: ci sono gio, abe, emi e sem, manca un giocatore.")
-
-
 def test_possibile():
-    t = testi.possibile(regole.Possibile(d("14/10"), (GIO, ABE, EMI, SEM, SESE)))
-    assert t == testi.Testo("✅ mar 14/10 va bene: ci sono gio, abe, emi, sem e sese.")
-
-
-def test_non_piu_possibile():
-    assert testi.non_piu(regole.NonPiu(d("14/10"), (SEM,))) == testi.Testo(
-        "⚠️ mar 14/10 non va più bene: sem ha tolto il voto."
-    )
-    assert testi.non_piu(regole.NonPiu(d("14/10"), (SEM, SESE))) == testi.Testo(
-        "⚠️ mar 14/10 non va più bene: sem e sese hanno tolto il voto."
-    )
-    assert testi.non_piu(regole.NonPiu(d("14/10"), ())) == testi.Testo(
-        "⚠️ mar 14/10 non va più bene: non ci sono più il master e quattro giocatori."
+    gruppo = [regole.Possibile(d(g), (GIO, ABE, EMI, SEM, SESE)) for g in ("13/10", "14/10")]
+    assert testi.annunci(gruppo[:1], ROSTER, NOME, SETTIMANA_PROVE) == testi.Testo("✅ Lunedì si può fare!")
+    assert testi.annunci(gruppo, ROSTER, NOME, SETTIMANA_PROVE) == testi.Testo(
+        "✅ Lunedì e martedì si può fare!"
     )
 
 
-def test_impossibile_con_una_data_in_tre():
-    a = regole.Impossibile(((d("14/10"), (GIO, ABE, EMI, SEM)),))
-    t = testi.impossibile(a, (GIO, ABE), NOME)
+def test_non_piu():
+    sem, sese = regole.NonPiu(d("14/10"), (SEM,)), regole.NonPiu(d("16/10"), (SESE, SEM))
+    assert testi.annunci([sem], ROSTER, NOME, SETTIMANA_PROVE) == testi.Testo(
+        "Martedì è saltato, Sem non può più."
+    )
+    # le persone di tutte le date, una volta sola e nell'ordine del roster
+    assert testi.annunci([sem, sese], ROSTER, NOME, SETTIMANA_PROVE) == testi.Testo(
+        "Martedì e giovedì sono saltati, Sem e Sese non possono più."
+    )
+
+
+def test_non_piu_la_domenica_e_senza_nomi():
+    assert testi.annunci([regole.NonPiu(d("19/10"), (SEM,))], ROSTER, NOME, SETTIMANA_PROVE) == testi.Testo(
+        "Domenica è saltata, Sem non può più."
+    )
+    # per una data il bot non sa chi (dopo una ripresa): nessun nome
+    domeniche = [regole.NonPiu(d("19/10"), (SEM,)), regole.NonPiu(d("26/10"), ())]
+    assert testi.annunci(domeniche, ROSTER, NOME, [d("19/10"), d("26/10")]) == testi.Testo(
+        "Domenica 19 e domenica 26 sono saltate."
+    )
+    assert testi.annunci([regole.NonPiu(d("14/10"), ())], ROSTER, NOME, SETTIMANA_PROVE) == testi.Testo(
+        "Martedì è saltato."
+    )
+
+
+def test_impossibile():
+    con_tre = regole.Impossibile(
+        ((d("13/10"), (GIO, ABE, EMI, SEM)), (d("16/10"), (GIO, ABE, EMI, SESE)))
+    )
+    t = testi.annunci([con_tre], ROSTER, NOME, SETTIMANA_PROVE)
     assert t.testo == (
-        "😬 Con quattro giocatori non ci si sta in nessuna di queste date. "
-        "Con tre: mar 14/10 (gio, abe, emi, sem). "
-        "gio, abe: /chiudi@ProssimaVoltaBot 14/10 per tenerla, "
-        "/chiudi@ProssimaVoltaBot rimanda per rifare il sondaggio sulla settimana dopo."
+        "😬 Con i voti attuali non ci sono date con quattro giocatori. Con tre: lunedì e giovedì. "
+        "Gio: /chiudi@ProssimaVoltaBot 13/10 per tenerne una, "
+        "/chiudi@ProssimaVoltaBot rimanda per rimandare alla prossima settimana."
     )
-    assert menzionati(t) == [("gio", GIO.telegram_id), ("abe", ABE.telegram_id)]
-
-
-def test_impossibile_con_piu_date_in_tre():
-    a = regole.Impossibile(
-        ((d("14/10"), (GIO, ABE, EMI, SEM)), (d("16/10"), (GIO, ABE, SEM, SESE)))
+    assert menzionati(t) == [("Gio", GIO.telegram_id)]
+    una = regole.Impossibile(((d("13/10"), (GIO, ABE, EMI, SEM)),))
+    assert "Con tre: lunedì. Gio: /chiudi@ProssimaVoltaBot 13/10 per tenerla, " in (
+        testi.annunci([una], ROSTER, NOME, SETTIMANA_PROVE).testo
     )
-    t = testi.impossibile(a, (GIO, ABE), NOME)
-    assert "Con tre: mar 14/10 (gio, abe, emi, sem); gio 16/10 (gio, abe, sem, sese). " in t.testo
-    assert "/chiudi@ProssimaVoltaBot 14/10 per tenerla" in t.testo
-    assert menzionati(t) == [("gio", GIO.telegram_id), ("abe", ABE.telegram_id)]
-
-
-def test_impossibile_senza_date_in_tre():
-    t = testi.impossibile(regole.Impossibile(()), (GIO, ABE), NOME)
-    assert t.testo == (
-        "😬 Con quattro giocatori non ci si sta in nessuna di queste date, e nemmeno con tre. "
-        "gio, abe: /chiudi@ProssimaVoltaBot rimanda per rifare il sondaggio sulla settimana dopo."
+    senza = testi.annunci([regole.Impossibile(())], ROSTER, NOME, SETTIMANA_PROVE)
+    assert senza.testo == (
+        "😬 Con i voti attuali non ci sono date con quattro giocatori, e nemmeno con tre. "
+        "Gio: /chiudi@ProssimaVoltaBot rimanda per rimandare alla prossima settimana."
     )
-    assert menzionati(t) == [("gio", GIO.telegram_id), ("abe", ABE.telegram_id)]
+    assert menzionati(senza) == [("Gio", GIO.telegram_id)]
 
 
-def test_annuncio_sceglie_il_testo_di_ogni_tipo():
-    quasi = regole.Quasi(d("14/10"), (GIO, ABE, EMI, SEM), (SESE,))
-    possibile = regole.Possibile(d("14/10"), (GIO, ABE, EMI, SEM, SESE))
-    assert testi.annuncio(quasi, ROSTER, NOME) == testi.quasi(quasi)
-    assert testi.annuncio(possibile, ROSTER, NOME) == testi.possibile(possibile)
-    assert testi.annuncio(quasi, ROSTER, NOME) != testi.annuncio(possibile, ROSTER, NOME)
-
-
-def test_annuncio_sceglie_il_testo_e_menziona_chi_chiude_dal_roster():
-    assert testi.annuncio(regole.NonPiu(d("14/10"), (SEM,)), ROSTER, NOME) == testi.non_piu(
-        regole.NonPiu(d("14/10"), (SEM,))
-    )
-    t = testi.annuncio(regole.Impossibile(()), ROSTER, NOME)
-    assert menzionati(t) == [("gio", GIO.telegram_id), ("abe", ABE.telegram_id)]
+def test_impossibile_menziona_chi_chiude_se_il_master_non_puo():
+    roster = Roster((replace(GIO, chiude=False), ABE, EMI, SEM, SESE, PIPPO))
+    t = testi.annunci([regole.Impossibile(())], roster, NOME, SETTIMANA_PROVE)
+    assert "nemmeno con tre. Abe: /chiudi@" in t.testo
+    assert menzionati(t) == [("Abe", ABE.telegram_id)]
 
 
 @pytest.mark.parametrize(
@@ -227,10 +230,6 @@ def test_le_risposte_ai_comandi():
         "forse quello che Telegram non mi ha confermato. "
         "Il sondaggio che conto è questo: votate qui."
     )
-    assert testi.solo_chi_chiude((GIO, ABE)) == testi.Testo("Il sondaggio lo chiudono gio o abe.")
-    assert testi.solo_chi_chiude((GIO, ABE, EMI)) == testi.Testo(
-        "Il sondaggio lo chiudono gio, abe o emi."
-    )
     assert testi.nessun_sondaggio() == testi.Testo("Non c'è nessun sondaggio aperto.")
     assert testi.chiuso([d("14/10"), d("16/10")]) == testi.Testo(
         "🔒 Sondaggio chiuso. Date possibili: mar 14/10, gio 16/10."
@@ -269,6 +268,15 @@ def test_le_risposte_ai_comandi():
     )
 
 
+def test_chi_chiude():
+    assert testi.solo_chi_chiude(ROSTER) == testi.Testo("Il sondaggio lo chiude Gio (o Abe, in emergenza).")
+    assert testi.chi_chiude(Roster((GIO, replace(ABE, chiude=False), EMI))) == "chiude Gio"
+    senza_master = Roster((replace(GIO, chiude=False), ABE, replace(EMI, chiude=True)))
+    assert testi.chi_chiude(senza_master) == "chiudono Abe e Emi"
+    tre = Roster((GIO, ABE, replace(EMI, chiude=True)))
+    assert testi.chi_chiude(tre) == "chiude Gio (o Abe o Emi, in emergenza)"
+
+
 def test_il_buio_con_le_ore_di_zurigo():
     # ora legale: UTC+2
     dal = datetime(2025, 10, 12, 19, 5, tzinfo=UTC)
@@ -300,16 +308,16 @@ def test_gia_chiuso_dopo_il_buio():
 def test_riapro():
     t = testi.riapro((ABE, EMI, SEM), (SESE, PIPPO))
     assert t.testo == (
-        "Riapro il sondaggio. Ho già i voti di abe, emi e sem: se non avete cambiato idea, "
-        "non serve rivotare. Non hanno ancora votato: sese, pippo."
+        "Riapro il sondaggio. Ho già i voti di Abe, Emi e Sem: se non avete cambiato idea, "
+        "non serve rivotare. Non hanno ancora votato: Sese, Pippo."
     )
-    assert menzionati(t) == [("sese", SESE.telegram_id), ("pippo", PIPPO.telegram_id)]
+    assert menzionati(t) == [("Sese", SESE.telegram_id), ("Pippo", PIPPO.telegram_id)]
 
 
 def test_riapro_senza_le_parti_vuote():
-    assert testi.riapro((), (GIO, ABE)).testo == "Riapro il sondaggio. Non hanno ancora votato: gio, abe."
+    assert testi.riapro((), (GIO, ABE)).testo == "Riapro il sondaggio. Non hanno ancora votato: Gio, Abe."
     assert testi.riapro((ABE,), ()) == testi.Testo(
-        "Riapro il sondaggio. Ho già i voti di abe: se non avete cambiato idea, non serve rivotare."
+        "Riapro il sondaggio. Ho già i voti di Abe: se non avete cambiato idea, non serve rivotare."
     )
     assert testi.date_passate() == testi.Testo("Le date del sondaggio sono passate: lo chiudo.")
 
@@ -347,3 +355,27 @@ def test_scegli_frase_sceglie_nella_lista_che_riceve():
     # usate tutte, o usate solo frasi che non ci sono più: si sceglie fra tutte
     assert testi.scegli_frase(("Nessuna: a", "Nessuna: b"), {"Nessuna: a", "Nessuna: b"}, primo) == "Nessuna: a"
     assert testi.scegli_frase(("Nessuna: a",), {testi.FRASI_NESSUNA[0]}, primo) == "Nessuna: a"
+
+
+def test_i_nomi_con_la_maiuscola():
+    assert testi.nome(GIO) == "Gio"
+    t = testi.riapro((ABE,), (SESE, PIPPO))
+    assert t.testo == (
+        "Riapro il sondaggio. Ho già i voti di Abe: se non avete cambiato idea, non serve rivotare. "
+        "Non hanno ancora votato: Sese, Pippo."
+    )
+    assert menzionati(t) == [("Sese", SESE.telegram_id), ("Pippo", PIPPO.telegram_id)]
+
+
+def test_la_maiuscola_non_sposta_le_menzioni():
+    strano = Persona("èsè🎲", 7, "giocatore")
+    assert menzionati(testi.riapro((), (strano, PIPPO))) == [("Èsè🎲", 7), ("Pippo", PIPPO.telegram_id)]
+
+
+def test_le_date_dette():
+    assert testi.una_settimana([d("13/10"), d("14/10"), d("19/10")])
+    assert not testi.una_settimana([d("19/10"), d("20/10")])
+    assert testi.giorno_detto(d("14/10"), True) == "martedì"
+    assert testi.giorno_detto(d("14/10"), False) == "martedì 14"
+    assert testi.date_dette([d("16/10"), d("13/10")], True) == "lunedì e giovedì"
+    assert testi.date_dette([d("13/10"), d("14/10"), d("16/10")], False) == "lunedì 13, martedì 14 e giovedì 16"

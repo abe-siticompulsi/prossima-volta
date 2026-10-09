@@ -4,6 +4,7 @@ from datetime import timedelta
 import pytest
 
 from prossima import testi
+from prossima.bot import ATTESA_ANNUNCI
 from prossima.regole import Voto
 from prossima.store import NonConfermato
 from prossima.telegram import TelegramRifiuto, TelegramTroppeRichieste
@@ -409,11 +410,8 @@ def test_quasi_con_le_menzioni_di_chi_non_ha_votato(bot, telegram):
     assert telegram.scritti() == []
     vota(bot, telegram, SEM, "14/10")
     [quasi] = telegram.di_tipo("scrivi")
-    assert quasi["testo"] == (
-        "📅 mar 14/10: ci sono gio, abe, emi e sem, manca un giocatore. "
-        "Non hanno ancora votato: sese, pippo."
-    )
-    assert menzionati(quasi) == ["sese", "pippo"]
+    assert quasi["testo"] == "Martedì ci siamo quasi. Sese e Pippo, ci siete?"
+    assert menzionati(quasi) == ["Sese", "Pippo"]
     assert [e["user"]["id"] for e in quasi["entita"]] == [SESE.telegram_id, PIPPO.telegram_id]
     assert (quasi["chat_id"], quasi["risposta_a"]) == (GRUPPO, None)
     bot.ricevi([])
@@ -427,11 +425,10 @@ def test_possibile_non_piu_e_di_nuovo_possibile(bot, telegram):
     vota(bot, telegram, SEM, "16/10")
     vota(bot, telegram, PIPPO, "14/10")
     assert telegram.scritti() == [
-        "📅 mar 14/10: ci sono gio, abe, emi e sem, manca un giocatore. "
-        "Non hanno ancora votato: sese, pippo.",
-        "✅ mar 14/10 va bene: ci sono gio, abe, emi, sem e sese.",
-        "⚠️ mar 14/10 non va più bene: sem ha tolto il voto.",
-        "✅ mar 14/10 va bene: ci sono gio, abe, emi, sese e pippo.",
+        "Martedì ci siamo quasi. Sese e Pippo, ci siete?",
+        "✅ Martedì si può fare!",
+        "Martedì è saltato, Sem non può più.",
+        "✅ Martedì si può fare!",
     ]
 
 
@@ -441,11 +438,11 @@ def test_impossibile_e_di_nuovo_dopo_che_una_data_e_tornata_in_gioco(bot, telegr
     vota(bot, telegram, GIO, "")  # le date tornano in gioco: niente da dire
     vota(bot, telegram, GIO, "nessuna")
     impossibile = (
-        "😬 Con quattro giocatori non ci si sta in nessuna di queste date, e nemmeno con tre. "
-        "gio, abe: /chiudi@ProssimaVoltaBot rimanda per rifare il sondaggio sulla settimana dopo."
+        "😬 Con i voti attuali non ci sono date con quattro giocatori, e nemmeno con tre. "
+        "Gio: /chiudi@ProssimaVoltaBot rimanda per rimandare alla prossima settimana."
     )
     assert telegram.scritti() == [impossibile, impossibile]
-    assert menzionati(telegram.di_tipo("scrivi")[0]) == ["gio", "abe"]
+    assert menzionati(telegram.di_tipo("scrivi")[0]) == ["Gio"]
 
 
 def test_chi_non_e_nel_roster_non_conta_negli_annunci(bot, telegram):
@@ -463,9 +460,8 @@ def test_una_data_passata_non_si_annuncia(bot, telegram, orologio):
         vota(bot, telegram, persona, "14/10 16/10")
     # quasi e possibile il 14 come il 16, ma del 14 non si dice niente
     assert telegram.scritti() == [
-        "📅 gio 16/10: ci sono gio, abe, emi e sem, manca un giocatore. "
-        "Non hanno ancora votato: sese, pippo.",
-        "✅ gio 16/10 va bene: ci sono gio, abe, emi, sem e sese.",
+        "Giovedì ci siamo quasi. Sese e Pippo, ci siete?",
+        "✅ Giovedì si può fare!",
     ]
 
 
@@ -479,8 +475,8 @@ def test_impossibile_conta_solo_le_date_da_oggi_in_poi(bot, telegram, orologio):
     # il master non c'è il 16, l'unica data da oggi in poi: con tre non c'è
     # nessuna data da tenere, e il 14 (con tre, ma passato) non si propone
     assert telegram.scritti() == [
-        "😬 Con quattro giocatori non ci si sta in nessuna di queste date, e nemmeno con tre. "
-        "gio, abe: /chiudi@ProssimaVoltaBot rimanda per rifare il sondaggio sulla settimana dopo."
+        "😬 Con i voti attuali non ci sono date con quattro giocatori, e nemmeno con tre. "
+        "Gio: /chiudi@ProssimaVoltaBot rimanda per rimandare alla prossima settimana."
     ]
 
 
@@ -488,19 +484,19 @@ def test_un_possibile_su_una_data_che_passa_non_diventa_non_piu_possibile(bot, t
     bot.ricevi([comando("/sondaggio mar gio")])
     for persona in (GIO, ABE, EMI, SEM, SESE):
         vota(bot, telegram, persona, "14/10 16/10")
-    assert "✅ mar 14/10 va bene: ci sono gio, abe, emi, sem e sese." in telegram.scritti()
+    assert "✅ Martedì e giovedì si può fare!" in telegram.scritti()
     fino_al(bot, orologio, 15)
     prima = len(telegram.scritti())
     vota(bot, telegram, SEM, "")
     # il 14 è passato, non «non più possibile»: cambia solo il 16
-    assert telegram.scritti()[prima:] == ["⚠️ gio 16/10 non va più bene: sem ha tolto il voto."]
+    assert telegram.scritti()[prima:] == ["Giovedì è saltato, Sem non può più."]
 
 
 def test_dopo_un_possibile_su_una_data_passata_niente_impossibile(bot, telegram, orologio):
     bot.ricevi([comando("/sondaggio mar gio")])
     for persona in (GIO, ABE, EMI, SEM, SESE):
         vota(bot, telegram, persona, "14/10")  # il 16 è fuori: il master non c'è
-    assert telegram.scritti()[-1] == "✅ mar 14/10 va bene: ci sono gio, abe, emi, sem e sese."
+    assert telegram.scritti()[-1] == "✅ Martedì si può fare!"
     fino_al(bot, orologio, 15)
     # da oggi in poi resta il 16, fuori; ma il 14 andava bene e nessuno ha tolto
     # il voto: probabilmente si è giocato, e «nessuna di queste date» sarebbe falso
@@ -517,8 +513,8 @@ def test_senza_un_possibile_su_una_data_passata_l_impossibile_lo_dice_il_tempo(
     fino_al(bot, orologio, 15)
     # da oggi in poi resta il 16, fuori: lo dice il passare del tempo, non un voto
     assert telegram.scritti() == [
-        "😬 Con quattro giocatori non ci si sta in nessuna di queste date, e nemmeno con tre. "
-        "gio, abe: /chiudi@ProssimaVoltaBot rimanda per rifare il sondaggio sulla settimana dopo."
+        "😬 Con i voti attuali non ci sono date con quattro giocatori, e nemmeno con tre. "
+        "Gio: /chiudi@ProssimaVoltaBot rimanda per rimandare alla prossima settimana."
     ]
 
 
@@ -535,8 +531,7 @@ def test_un_annuncio_che_non_parte_riparte_al_giro_seguente(bot, telegram, store
     del telegram.guasti["scrivi"]
     bot.ricevi([])
     bot.ricevi([])
-    assert len(telegram.scritti()) == 1
-    assert telegram.scritti()[0].startswith("📅 mar 14/10")
+    assert telegram.scritti() == ["Martedì ci siamo quasi. Sese e Pippo, ci siete?"]
 
 
 def test_dopo_un_429_niente_parte_prima_di_retry_after(bot, telegram, orologio):
@@ -626,21 +621,29 @@ def test_un_429_sulla_posta_lascia_la_lettera(bot, telegram, store, orologio):
 
 
 def test_un_annuncio_rifiutato_non_ferma_i_seguenti(bot, telegram, store, monkeypatch, caplog):
-    bot.ricevi([comando("/sondaggio mar gio")])
-    for persona in (GIO, ABE, EMI):
-        vota(bot, telegram, persona, "14/10 16/10")
+    """Nello stesso giro un «non più» e un «quasi»: due messaggi; il primo è
+    rifiutato, il secondo parte."""
+    bot.ricevi([comando("/sondaggio lun mar")])
+    vota(bot, telegram, GIO, "13/10 14/10")
+    vota(bot, telegram, ABE, "13/10 14/10")
+    vota(bot, telegram, EMI, "13/10")
+    vota(bot, telegram, SEM, "13/10 14/10")
+    vota(bot, telegram, SESE, "13/10")  # lunedì si può fare
     vero = telegram.scrivi
 
-    def rifiuta_il_14(chat_id, testo, entita=(), risposta_a=None):
-        if testo.startswith("📅 mar 14/10"):
+    def rifiuta_lunedi(chat_id, testo, entita=(), risposta_a=None):
+        if testo.startswith("Lunedì è saltato"):
             raise TelegramRifiuto("sendMessage: Bad Request: can't parse entities")
         return vero(chat_id, testo, entita, risposta_a)
 
-    monkeypatch.setattr(telegram, "scrivi", rifiuta_il_14)
+    monkeypatch.setattr(telegram, "scrivi", rifiuta_lunedi)
+    prima = len(telegram.scritti())
     with caplog.at_level(logging.WARNING):
-        vota(bot, telegram, SEM, "14/10 16/10")  # quasi il 14 e il 16, nello stesso giro
-    assert [t.split(":")[0] for t in telegram.scritti()] == ["📅 gio 16/10"]
-    assert store.fatti(store.sondaggio_aperto().id).quasi == {d("16/10")}
+        vota(bot, telegram, EMI, "14/10")  # lunedì salta, martedì è quasi
+    assert telegram.scritti()[prima:] == ["Martedì ci siamo quasi. Pippo, ci sei?"]
+    fatti = store.fatti(store.sondaggio_aperto().id)
+    assert d("13/10") in fatti.possibili  # il «non più» rifiutato non è fatto
+    assert fatti.quasi == {d("13/10"), d("14/10")}
     assert {livello for livello, _, _ in avvisi(caplog)} == {logging.ERROR}
     assert "can't parse entities" in caplog.text
 
@@ -668,7 +671,7 @@ def test_un_annuncio_rifiutato_si_salta_fino_al_riavvio(
     assert store.fatti(store.sondaggio_aperto().id).quasi == frozenset()
     monkeypatch.undo()
     riavvia().ricevi([])
-    assert [t.split(":")[0] for t in telegram.scritti()] == ["📅 mar 14/10"]
+    assert telegram.scritti() == ["Martedì ci siamo quasi. Sese e Pippo, ci siete?"]
     assert store.fatti(store.sondaggio_aperto().id).quasi == {d("14/10")}
 
 
@@ -736,7 +739,76 @@ def test_un_aggiornamento_letto_due_volte_non_fa_doppioni(bot, telegram):
     bot.ricevi([lancio, *voti])
     assert len(telegram.di_tipo("manda_sondaggio")) == 1
     assert telegram.scritti() == [
-        "📅 mar 14/10: ci sono gio, abe, emi e sem, manca un giocatore. "
-        "Non hanno ancora votato: sese, pippo.",
+        "Martedì ci siamo quasi. Sese e Pippo, ci siete?",
         "C'è già un sondaggio aperto: chiudilo prima con /chiudi@ProssimaVoltaBot.",
     ]
+
+
+# --- l'attesa degli annunci
+
+
+def quattro_su_martedi(bot, telegram):
+    """Gio e tre giocatori su martedì; Sese e Pippo non hanno votato: «quasi»."""
+    bot.ricevi([comando("/sondaggio")])
+    for persona in (GIO, ABE, EMI, SEM):
+        vota(bot, telegram, persona, "14/10")
+
+
+def test_gli_annunci_aspettano_due_minuti_senza_voti(riavvia, telegram, orologio):
+    bot = riavvia(attesa_annunci=ATTESA_ANNUNCI)
+    quattro_su_martedi(bot, telegram)
+    assert telegram.scritti() == []
+    orologio.avanza(minutes=1, seconds=59)
+    bot.ricevi([])
+    assert telegram.scritti() == []
+    orologio.avanza(seconds=2)
+    bot.ricevi([])
+    assert telegram.scritti() == ["Martedì ci siamo quasi. Sese e Pippo, ci siete?"]
+
+
+def test_un_voto_nuovo_fa_ricominciare_l_attesa(riavvia, telegram, orologio):
+    bot = riavvia(attesa_annunci=ATTESA_ANNUNCI)
+    quattro_su_martedi(bot, telegram)
+    orologio.avanza(minutes=1, seconds=30)
+    vota(bot, telegram, EMI, "14/10 16/10")
+    orologio.avanza(minutes=1)
+    bot.ricevi([])
+    assert telegram.scritti() == []
+    orologio.avanza(minutes=1)
+    bot.ricevi([])
+    assert telegram.scritti() == ["Martedì ci siamo quasi. Sese e Pippo, ci siete?"]
+
+
+def test_uno_stato_di_passaggio_non_si_annuncia(riavvia, telegram, orologio):
+    bot = riavvia(attesa_annunci=ATTESA_ANNUNCI)
+    quattro_su_martedi(bot, telegram)
+    vota(bot, telegram, SESE, "14/10")  # martedì si può fare…
+    vota(bot, telegram, SESE, "")  # …per un attimo
+    orologio.avanza(minutes=3)
+    bot.ricevi([])
+    assert telegram.scritti() == ["Martedì ci siamo quasi. Sese e Pippo, ci siete?"]
+
+
+def test_i_comandi_non_aspettano(riavvia, telegram):
+    bot = riavvia(attesa_annunci=ATTESA_ANNUNCI)
+    quattro_su_martedi(bot, telegram)
+    bot.ricevi([comando("/sondaggio")])
+    assert telegram.scritti() == ["C'è già un sondaggio aperto: chiudilo prima con /chiudi@ProssimaVoltaBot."]
+
+
+def test_dopo_un_riavvio_gli_annunci_dovuti_partono_subito(riavvia, telegram):
+    quattro_su_martedi(riavvia(attesa_annunci=ATTESA_ANNUNCI), telegram)
+    riavvia(attesa_annunci=ATTESA_ANNUNCI).ricevi([])
+    assert telegram.scritti() == ["Martedì ci siamo quasi. Sese e Pippo, ci siete?"]
+
+
+def test_un_voto_che_cambia_due_date_fa_un_messaggio(bot, telegram):
+    bot.ricevi([comando("/sondaggio")])
+    for persona in (GIO, ABE, EMI, SEM):
+        vota(bot, telegram, persona, "13/10 14/10")
+    assert telegram.scritti() == ["Lunedì e martedì ci siamo quasi. Sese e Pippo, ci siete?"]
+    vota(bot, telegram, SESE, "13/10 14/10")
+    assert telegram.scritti()[-1] == "✅ Lunedì e martedì si può fare!"
+    vota(bot, telegram, SEM, "nessuna")
+    assert telegram.scritti()[-1] == "Lunedì e martedì sono saltati, Sem non può più."
+    assert len(telegram.scritti()) == 3

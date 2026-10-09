@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -47,6 +47,8 @@ def riavvia(telegram, store, orologio):
             "fuso": ZURIGO,
             "adesso": orologio,
             "caso": lambda restanti: restanti[0],
+            # le prove degli annunci li vogliono subito; quelle dell'attesa la chiedono
+            "attesa_annunci": timedelta(0),
         }
         return Bot(**{**argomenti, **cambi})
 
