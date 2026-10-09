@@ -5455,3 +5455,14 @@ Durante l'esecuzione:
   del bot sono diventati codice (`_Scrittura.codice`): `/aiuto`, il rifiuto di
   «con», i «riprovate con:», «impossibile». I bottoni per «impossibile» vengono
   dopo, in un lavoro a parte.
+
+### I bottoni di «impossibile» (2026-10-10)
+
+Il piano è `docs/superpowers/plans/2026-10-10-bottoni.md`, la spec §3.5 (punto 4) e §3.10.
+
+- Sotto «impossibile» ci sono i bottoni «Tieni <giorno>» e «Rimanda alla prossima settimana».
+- Per chi può chiudere, un tocco vale come `/chiudi <argomento>` della stessa persona.
+- Il «comando» di `Chiusure.chiudi` è il messaggio con i bottoni: un tocco riletto, o un secondo bottone
+  dopo il primo, non chiude due volte.
+- Con più persone che possono chiudere e un master che non può, il testo dice «Abe e Emi, decidete voi:».
+- Il piano reale chiede ad Alberto di toccare un bottone nella chat privata.

@@ -64,6 +64,21 @@ def risposte(b: BotTelegram, poll_id: str, quante: int) -> list[dict]:
     )
 
 
+def tocco_su(b: BotTelegram, messaggio: int) -> dict:
+    """Il primo tocco su un bottone del messaggio `messaggio`, letto senza offset."""
+    fine = time.monotonic() + ATTESA_VOTI
+    while time.monotonic() < fine:
+        for a in b.aggiornamenti(None, 5):
+            tocco = a.get("callback_query") or {}
+            if (tocco.get("message") or {}).get("message_id") == messaggio:
+                return tocco
+        time.sleep(1)
+    pytest.fail(
+        f"in {ATTESA_VOTI} secondi non è arrivato nessun tocco: il servizio è davvero fermo? "
+        "(due lettori si rubano gli aggiornamenti) hai toccato il bottone?"
+    )
+
+
 def test_il_nome_del_bot():
     assert bot().io().lower().endswith("bot")
 
@@ -159,3 +174,21 @@ def test_fermare_due_volte():
             "come «già chiuso»: aggiorna `_GIA_CHIUSO` in telegram.py"
         )
     pytest.fail("il secondo stopPoll sullo stesso sondaggio è riuscito: Telegram non lo rifiuta")
+
+
+def test_un_bottone_toccato_arriva_al_bot():
+    """Contratti: un messaggio con un bottone (inline keyboard) parte; il tocco
+    arriva come `callback_query`, con l'identificativo di chi tocca, il dato del
+    bottone e il messaggio; la risposta al tocco con un avviso e la rimozione dei
+    bottoni riescono. Alberto tocca il bottone: lo dice il messaggio."""
+    b = bot()
+    messaggio = b.scrivi(
+        chat(),
+        "🧪 Prova di Prossima volta: tocca il bottone qui sotto.",
+        bottoni=[[("Tocca qui", "prova:bottone")]],
+    )
+    tocco = tocco_su(b, messaggio["message_id"])
+    assert tocco["from"]["id"] == chat()
+    assert tocco["data"] == "prova:bottone"
+    b.rispondi_al_tocco(tocco["id"], "🧪 Tocco ricevuto: bottone a posto.")
+    b.togli_bottoni(chat(), messaggio["message_id"])
