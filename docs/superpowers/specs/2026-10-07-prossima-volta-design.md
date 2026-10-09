@@ -177,8 +177,9 @@ stesso giro prima «non più», poi «possibile», poi «quasi», poi «impossib
    «Martedì e giovedì sono saltati, Sem e Sese non possono più.» Le persone
    sono tutte quelle che hanno tolto una di quelle date, nell'ordine del
    roster. Domenica è femminile: «Domenica è saltata», «Domenica 12 e domenica
-   19 sono saltate». Se il bot non sa chi (dopo una ripresa, §3.8), solo
-   «Martedì è saltato.»; se lo sa per alcune date, nomina quelle persone.
+   19 sono saltate». I nomi ci sono solo se il bot sa chi se n'è andato per
+   tutte le date del messaggio; se per una non lo sa (dopo una ripresa, §3.8),
+   solo «Martedì è saltato.», «Martedì e giovedì sono saltati.»
 4. **Impossibile** — quando tutte le date diventano fuori (di nuovo, se nel
    frattempo una era tornata in gioco):
    - con date in cui ci sono il master e almeno tre giocatori: «😬 Con i voti
