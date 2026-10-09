@@ -31,6 +31,8 @@ suo, un container suo, sulla stessa macchina dei selfie.
 | **Privacy del bot attiva** | Il bot riceve solo i comandi rivolti a lui e i voti dei suoi sondaggi: non legge la chat. |
 | **Nessun gruppo di prova** | Richiesta di Alberto: «siamo tra amici, per testare servono le persone vere». Il piano reale gira nella chat privata di Alberto con il bot. |
 | **Frasi di «Nessuna di queste» da una lista scritta a mano** | Prevedibili, lette da Alberto prima che arrivino nel gruppo. La lista sta in un file sul server: si cambia senza toccare il codice, e le battute sulle persone del gruppo restano fuori dal repository. Ollama (nella rete locale) è una possibile aggiunta futura, fuori da questa spec. |
+| **Annunci brevi, dopo 2 minuti senza voti nuovi, accorpati per tipo** | Il primo sondaggio vero ha mandato cinque messaggi per un voto solo, e il gruppo li ha trovati prolissi. Si dice la situazione quando i voti si sono assestati, in poche parole, e solo quando serve a qualcuno. |
+| **Il sabato fuori dai giorni di sempre** | Per la maggior parte delle settimane il sabato non va bene a nessuno. Si aggiunge con `con sabato`; i giorni di sempre stanno nella configurazione (`PV_GIORNI`). |
 | **Ogni messaggio afferma solo ciò che è verificato** | La regola di tutti i progetti di Alberto. |
 
 ## 3. Il comportamento
@@ -42,11 +44,18 @@ Nel gruppo del party, `/sondaggio@<bot>` (il menu dei comandi di Telegram aggiun
 `/sondaggio` nudo potrebbe non arrivare). Il bot accetta `/sondaggio` e `/sondaggio@<suo nome>`
 e ignora i comandi rivolti ad altri bot.
 
-- **Senza parametri**: i sette giorni della settimana seguente, da lunedì a
-  domenica. «Settimana seguente» è la settimana di calendario dopo quella di
-  oggi, nel fuso `Europe/Zurich` (di domenica è quella che comincia domani).
-- **Con giorni della settimana** (`lun mar mer gio ven sab dom`): quei giorni
-  della settimana seguente. `/sondaggio mar gio sab`.
+- **Senza parametri**: i giorni di sempre della settimana seguente: quelli di
+  `PV_GIORNI` (§5), di default tutti tranne il sabato. «Settimana seguente» è la
+  settimana di calendario dopo quella di oggi, nel fuso `Europe/Zurich` (di
+  domenica è quella che comincia domani).
+- **Con «con» e dei giorni**: i giorni di sempre più quelli.
+  `/sondaggio con sabato`. «con» viene per primo, e dopo ci sono solo giorni;
+  un giorno che è già fra quelli di sempre non cambia niente.
+- **Con giorni della settimana**: quei giorni della settimana seguente.
+  `/sondaggio mar gio sab`.
+- **I giorni** si scrivono abbreviati (`lun mar mer gio ven sab dom`) o per
+  intero, con o senza accento (`sabato`, `lunedì`, `lunedi`), anche in
+  `/chiudi` (§3.7) e in `PV_GIORNI`.
 - **Con date** (`g/m` o `g/m/aaaa`, e anche con il punto: `g.m`, `g.m.aaaa`):
   quelle date. Senza anno, la data è quella più vicina a oggi fra l'anno
   scorso, quest'anno e il prossimo (a pari distanza, quella che viene): in
@@ -67,6 +76,9 @@ e ignora i comandi rivolti ad altri bot.
     anche per un `29/2` il cui prossimo 29 febbraio è oltre un anno («La data
     29/2/2028 è troppo lontana.»);
   - più di 10 date: «Troppe date: al massimo 10.»;
+  - «con» non per primo, da solo, o seguito da qualcosa che non è un giorno:
+    «Per aggiungere un giorno a quelli di sempre: /sondaggio@<bot> con
+    sabato.»;
   - un sondaggio già aperto: risposta al messaggio del sondaggio aperto, «C'è
     già un sondaggio aperto: chiudilo prima con /chiudi@<bot>.».
 - **Telegram non conferma il sondaggio** (rete, 5xx, un rifiuto, la pausa
@@ -125,37 +137,63 @@ perché «quasi» valga **4**.
 
 ### 3.5 I messaggi
 
-Testo semplice, senza `parse_mode`. I nomi sono i soprannomi del roster. Le
-**menzioni** sono entità `text_mention` con l'identificativo Telegram della
-persona: notificano anche chi non ha un nome utente. Gli scostamenti delle
-entità si contano in unità UTF-16, come vuole Telegram (un'emoji come 📅 ne
-vale due). Le date nei messaggi hanno la forma delle opzioni («mar 14/10»).
+Testo semplice, senza `parse_mode`. I nomi sono i soprannomi del roster con
+l'iniziale maiuscola (gio → Gio), in tutti i messaggi. Le **menzioni** sono
+entità `text_mention` con l'identificativo Telegram della persona: notificano
+anche chi non ha un nome utente. Gli scostamenti delle entità si contano in
+unità UTF-16, come vuole Telegram (un'emoji come 😬 ne vale due).
 
-1. **Quasi** — una volta per data, la prima volta che la data è quasi:
-   «📅 mar 14/10: ci sono gio, abe, emi e sem, manca un giocatore. Non hanno
-   ancora votato: sese, pippo.» I nomi dopo «Non hanno ancora votato» sono
-   menzioni; se hanno votato tutti, la seconda frase non c'è.
-2. **Possibile** — una volta per data, quando diventa possibile (di nuovo
-   dopo un «non più possibile»): «✅ mar 14/10 va bene: ci sono gio, abe, emi,
-   sem e sese.» Il sondaggio resta aperto.
+**Le date negli annunci** si scrivono come si dicono: se tutte le date del
+sondaggio stanno nella stessa settimana (da lunedì a domenica), solo il giorno
+(«martedì»); altrimenti il giorno e il numero («martedì 13»). All'inizio della
+frase con la maiuscola. Più date: «lunedì e giovedì», «lunedì, martedì e
+giovedì», nell'ordine del calendario. Le opzioni del sondaggio, i messaggi di
+chiusura (§3.7) e i comandi da copiare restano nella forma «mar 14/10» e
+«14/10».
+
+**L'attesa.** Il bot annuncia solo quando nel sondaggio aperto non arrivano
+voti nuovi da **2 minuti**: dice la situazione quando i voti si sono assestati,
+e uno stato di passaggio (una data che va bene per pochi secondi, mentre
+qualcuno cambia voto) non si annuncia. Il ciclo legge Telegram almeno ogni 25
+secondi, quindi un annuncio parte fra 2 e circa 2 minuti e mezzo dopo l'ultimo
+voto. L'attesa sta in memoria: dopo un riavvio gli annunci dovuti partono
+subito. I comandi rispondono subito, e l'attesa vale solo per gli annunci.
+
+**Gli annunci**: un messaggio per tipo, con tutte le date di quel tipo; nello
+stesso giro prima «non più», poi «possibile», poi «quasi», poi «impossibile».
+
+1. **Quasi** — una volta per data, la prima volta che la data è quasi; ma solo
+   se qualcuno del roster non ha ancora votato (il messaggio serve a chiamarlo)
+   e solo se nessuna data del sondaggio è possibile in quel momento. Una data
+   quasi non annunciata per questi due motivi resta da annunciare, e lo sarà se
+   le condizioni cambiano. «Martedì ci siamo quasi. Pippo, ci sei?»; con più
+   date «Lunedì e giovedì ci siamo quasi. …»; con più persone «Sese e Pippo, ci
+   siete?». I nomi sono menzioni di chi non ha ancora votato.
+2. **Possibile** — una volta per data, quando diventa possibile (di nuovo dopo
+   un «non più possibile»): «✅ Martedì si può fare!»; con più date «✅ Lunedì e
+   martedì si può fare!». Il sondaggio resta aperto.
 3. **Non più possibile** — quando una data annunciata come possibile non lo è
-   più: «⚠️ mar 14/10 non va più bene: sem ha tolto il voto.» (con più persone:
-   «sem e sese hanno tolto il voto»). Se il bot non sa chi (dopo una ripresa,
-   §3.8): «⚠️ mar 14/10 non va più bene: non ci sono più il master e quattro
-   giocatori.»
+   più: «Martedì è saltato, Sem non può più.»; con più date e più persone
+   «Martedì e giovedì sono saltati, Sem e Sese non possono più.» Le persone
+   sono tutte quelle che hanno tolto una di quelle date, nell'ordine del
+   roster. Domenica è femminile: «Domenica è saltata», «Domenica 12 e domenica
+   19 sono saltate». Se il bot non sa chi (dopo una ripresa, §3.8), solo
+   «Martedì è saltato.»; se lo sa per alcune date, nomina quelle persone.
 4. **Impossibile** — quando tutte le date diventano fuori (di nuovo, se nel
    frattempo una era tornata in gioco):
-   - con date in cui ci sono il master e almeno tre giocatori: «😬 Con quattro
-     giocatori non ci si sta in nessuna di queste date. Con tre: mar 14/10
-     (gio, abe, emi, sem). gio, abe: /chiudi@<bot> 14/10 per tenerla,
-     /chiudi@<bot> rimanda per rifare il sondaggio sulla settimana dopo.»
-     (più date: elenco separato da «; »);
-   - senza: «😬 Con quattro giocatori non ci si sta in nessuna di queste date,
-     e nemmeno con tre. gio, abe: /chiudi@<bot> rimanda per rifare il
-     sondaggio sulla settimana dopo.»
-   «gio, abe» sono menzioni delle persone con `chiude = true`.
+   - con date in cui ci sono il master e almeno tre giocatori: «😬 Con i voti
+     attuali non ci sono date con quattro giocatori. Con tre: lunedì e giovedì.
+     Gio: /chiudi@<bot> 12/10 per tenerne una, /chiudi@<bot> rimanda per
+     rimandare alla prossima settimana.» (la data del comando è la prima di
+     quelle con tre);
+   - senza: «😬 Con i voti attuali non ci sono date con quattro giocatori, e
+     nemmeno con tre. Gio: /chiudi@<bot> rimanda per rimandare alla prossima
+     settimana.»
+   «Gio» è la menzione del master; se il master non ha `chiude = true`, quella
+   di chi ce l'ha.
 
-Un annuncio conta come fatto solo dopo che Telegram l'ha accettato. Quali
+Un annuncio conta come fatto solo dopo che Telegram l'ha accettato; un messaggio
+che accorpa più date le conta tutte insieme. Quali
 annunci mandare si calcola dallo stato (voti) e dagli annunci già fatti, con una
 funzione pura: rifarlo non ripete niente, e un messaggio non partito riparte al
 giro seguente (§4).
@@ -211,8 +249,9 @@ nel file non contano. Le frasi predefinite:
 
 ### 3.7 Chiudere: `/chiudi`
 
-Solo le persone con `chiude = true`. Altrimenti: «Il sondaggio lo chiudono gio o
-abe.» (i nomi dal roster). Senza sondaggio aperto: «Non c'è nessun sondaggio
+Solo le persone con `chiude = true`. Altrimenti: «Il sondaggio lo chiude Gio (o
+Abe, in emergenza).» (i nomi dal roster: il master, poi gli altri con `chiude =
+true`; se il master non può chiudere, «Il sondaggio lo chiudono …»). Senza sondaggio aperto: «Non c'è nessun sondaggio
 aperto.» (salvo il sondaggio che una ripresa ha fermato e aspetta di riaprire,
 che si chiude come se fosse aperto, §3.8)
 
@@ -368,9 +407,9 @@ aggiornamenti ricevuti:
 3. **Lo riapre** con le date non ancora passate (stessa domanda, frase di
    «Nessuna» nuova) e **tiene buoni i voti registrati**: valgono per il
    sondaggio nuovo finché la persona non vota nel nuovo, e allora vale il voto
-   nuovo. Messaggio: «Riapro il sondaggio. Ho già i voti di abe, emi e sem: se
-   non avete cambiato idea, non serve rivotare. Non hanno ancora votato: sese,
-   pippo.» (menzioni su chi non ha votato; parti omesse se vuote), in risposta
+   nuovo. Messaggio: «Riapro il sondaggio. Ho già i voti di Abe, Emi e Sem: se
+   non avete cambiato idea, non serve rivotare. Non hanno ancora votato: Sese,
+   Pippo.» (menzioni su chi non ha votato; parti omesse se vuote), in risposta
    al sondaggio riaperto: così si sa quale conta.
    Gli annunci già fatti restano validi (un «possibile» non si ripete).
    Un voto dato nel sondaggio di prima poco prima dello stop, che arriva dopo
@@ -471,6 +510,29 @@ salvare il caso «chi l'ha chiuso non si sa», dopo il riavvio il «già chiuso�
 si attribuisce alla ripresa, e il sondaggio si riapre con «Il sondaggio
 risultava già chiuso: non posso confrontare i conteggi.». Lo stesso dopo uno
 stop della ripresa che Telegram ha rifiutato (4xx). Caso raro, accettato.
+
+### 3.9 Le istruzioni: `/aiuto`
+
+Chiunque nel gruppo, `/aiuto@<bot>`. Il bot risponde al comando con:
+
+```
+Come si usa:
+/sondaggio@<bot> — sondaggio sulla settimana prossima, sabato escluso
+/sondaggio@<bot> con sabato — anche il sabato
+/sondaggio@<bot> mar gio — solo quei giorni
+/sondaggio@<bot> 14/10 16/10 — quelle date
+Chiude Gio (o Abe, in emergenza):
+/chiudi@<bot> — chiude e dice le date possibili
+/chiudi@<bot> 14/10 (o mar) — chiude e tiene quella data
+/chiudi@<bot> rimanda — chiude e rifà il sondaggio sulla settimana dopo
+```
+
+Le parti che dipendono dalla configurazione si scrivono da sole: «sabato
+escluso» e la riga «con sabato» dai giorni fuori da `PV_GIORNI` (con più giorni
+fuori, «sabato e domenica esclusi» e l'esempio con il primo; con nessuno, solo
+«sondaggio sulla settimana prossima» e niente riga «con …»); «Chiude Gio (o
+Abe, in emergenza)» dal roster, come in §3.7. I comandi sono quelli da toccare
+nel messaggio: Telegram li evidenzia.
 
 ## 4. Errori
 
@@ -577,7 +639,10 @@ dopo un 429, gli avvisi), che le altre toccano solo attraverso i suoi metodi.
 `PV_BOT_TOKEN`, `PV_GRUPPO` (l'identificativo del gruppo del party),
 `PV_ROSTER=/config/roster.toml`, `PV_FRASI=/config/frasi.txt` (facoltativa:
 senza, le frasi predefinite; §3.6), `PV_DOMANDA` (facoltativa: la domanda del
-sondaggio, al massimo 300 caratteri; senza, «Prossima volta?»), `PV_DB=/data/prossima.sqlite`,
+sondaggio, al massimo 300 caratteri; senza, «Prossima volta?»), `PV_GIORNI`
+(facoltativa: i giorni di sempre di `/sondaggio`, separati da spazi, almeno
+uno; senza, «lun mar mer gio ven dom»; un giorno sconosciuto ferma l'avvio
+senza ripetere il valore), `PV_DB=/data/prossima.sqlite`,
 `PV_BATTITO=/data/battito`, `PV_FUSO=Europe/Zurich`. Per il piano reale:
 `PV_REALE_CHAT` (l'identificativo di Alberto).
 
@@ -620,7 +685,8 @@ il ciclo tocca a ogni giro) ha meno di 2 minuti. Dopo aver corretto il roster o
 
 **Il bot**: nuovo, da @BotFather, privacy attiva (il default), aggiunto al
 gruppo del party. All'avvio registra i comandi (`setMyCommands`): `sondaggio`
-(«Sondaggio per la prossima volta») e `chiudi` («Chiude il sondaggio»).
+(«Sondaggio per la prossima volta»), `chiudi` («Chiude il sondaggio») e `aiuto`
+(«Come si usano i comandi»).
 
 ## 6. Prove
 
@@ -629,7 +695,12 @@ gruppo del party. All'avvio registra i comandi (`setMyCommands`): `sondaggio`
     domenica), giorni, date, mescolati, rifiuti; conteggi; possibile, quasi,
     fuori; impossibile (compreso il master che ha votato senza scegliere una
     data); `annunci_da_fare` (ogni annuncio una volta, «non più possibile» con
-    chi ha tolto il voto, «possibile» di nuovo dopo).
+    chi ha tolto il voto, «possibile» di nuovo dopo, «quasi» solo con qualcuno
+    che non ha votato e senza date possibili); i giorni di sempre e «con».
+  - l'attesa di 2 minuti dopo l'ultimo voto, con l'orologio finto; gli annunci
+    accorpati per tipo; le date dette per giorno o per giorno e numero; la
+    domenica femminile; le maiuscole nei nomi; `/aiuto` costruito da
+    `PV_GIORNI` e dal roster.
   - testi: le menzioni cadono sui nomi giusti con emoji davanti (UTF-16); tutte
     le frasi predefinite di «Nessuna» stanno nei 100 caratteri e cominciano con
     «Nessuna»; rotazione senza ripetizioni, nella lista che il bot riceve.
