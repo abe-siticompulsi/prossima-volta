@@ -183,17 +183,17 @@ stesso giro prima «non più», poi «possibile», poi «quasi», poi «impossib
    tutte le date del messaggio; se per una non lo sa (dopo una ripresa, §3.8),
    solo «Martedì è saltato.», «Martedì e giovedì sono saltati.»
 4. **Impossibile** — quando tutte le date diventano fuori (di nuovo, se nel
-   frattempo una era tornata in gioco):
+   frattempo una era tornata in gioco), con i bottoni per decidere (§3.10):
    - con date in cui ci sono il master e almeno tre giocatori: «😬 Con i voti
      attuali non ci sono date con quattro giocatori. Con tre: lunedì e giovedì.
-     Gio: /chiudi@<bot> 12/10 per tenerne una, /chiudi@<bot> rimanda per
-     rimandare alla prossima settimana.» (la data del comando è la prima di
-     quelle con tre; con una sola data, «per tenerla»);
+     Gio, decidi tu:» e i bottoni «Tieni lunedì», «Tieni giovedì» e «Rimanda
+     alla prossima settimana»;
    - senza: «😬 Con i voti attuali non ci sono date con quattro giocatori, e
-     nemmeno con tre. Gio: /chiudi@<bot> rimanda per rimandare alla prossima
-     settimana.»
+     nemmeno con tre. Gio, decidi tu:» e il solo bottone «Rimanda alla prossima
+     settimana».
    «Gio» è la menzione del master; se il master non ha `chiude = true`, quella
-   di chi ce l'ha.
+   di chi ce l'ha. Le date dei bottoni si dicono come nel testo («Tieni lunedì
+   13» se il sondaggio sta su più settimane).
 
 Un annuncio conta come fatto solo dopo che Telegram l'ha accettato; un messaggio
 che accorpa più date le conta tutte insieme. Quali
@@ -545,6 +545,30 @@ bot, i comandi con argomenti (in `/aiuto` tutti, nel rifiuto di «con», nei
 copiano interi. Restano evidenziati solo i comandi da soli, senza argomenti (per
 esempio «chiudilo prima con /chiudi@<bot>»).
 
+### 3.10 I bottoni
+
+Toccato, un comando evidenziato parte senza gli argomenti (§3.9): per decidere
+con un tocco, il messaggio «impossibile» ha dei bottoni (inline keyboard). Un
+bottone porta in `callback_data` l'azione, il sondaggio e l'argomento
+(`chiudi:<id del sondaggio>:<g/m>` o `chiudi:<id>:rimanda`); toccarlo non scrive
+niente nella chat, e il bot riceve un `callback_query`.
+
+- **Chi non può chiudere**: un avviso solo per lui, «Il sondaggio lo chiude Gio
+  (o Abe, in emergenza).» (`answerCallbackQuery` con `show_alert`).
+- **Il sondaggio del bottone non è più aperto** (chiuso con `/chiudi`, o con un
+  altro bottone): l'avviso «Il sondaggio è già chiuso.», e il bot toglie i
+  bottoni dal messaggio.
+- **Chi può chiudere, sul sondaggio aperto**: il bot risponde al tocco senza
+  testo e fa quello che farebbe `/chiudi 13/10` o `/chiudi rimanda` della
+  stessa persona (§3.7), con le risposte allo stesso messaggio «impossibile».
+  Se il sondaggio non è più aperto dopo (chiuso, o rimandato a uno nuovo), il
+  bot toglie i bottoni.
+- Un tocco riletto dopo un riavvio vale come un `/chiudi` riletto: niente due
+  volte. Una risposta al tocco o una rimozione dei bottoni che non riesce (per
+  esempio un tocco vecchio, dopo un buio) va solo nel log.
+- Fuori dal gruppo del party, o con un `callback_data` che il bot non conosce,
+  il bot risponde al tocco senza fare niente.
+
 ## 4. Errori
 
 - **Un messaggio che non parte** (rete, 5xx, 429 con `retry_after`): resta da
@@ -719,7 +743,7 @@ gruppo del party. All'avvio registra i comandi (`setMyCommands`): `sondaggio`
     un file di configurazione al posto di quello delle frasi), client Telegram con un trasporto finto di
     httpx (nessun token nei messaggi d'errore).
   - il percorso completo nel bot: `/sondaggio`, voti, annunci, `/chiudi` nelle tre
-    forme, rifiuti, invio fallito e ripreso, ripresa dopo il buio (conteggi
+    forme, i bottoni di «impossibile», rifiuti, invio fallito e ripreso, ripresa dopo il buio (conteggi
     uguali e diversi, date passate).
 - **Piano reale** (`-m reale`), con il bot vero nella chat privata di Alberto
   (`PV_REALE_CHAT`), **a servizio fermo** (due lettori dello stesso bot si
