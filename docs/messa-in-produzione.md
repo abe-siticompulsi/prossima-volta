@@ -82,7 +82,7 @@ docker compose logs prossima
 ```
 
 Nel log, entro qualche secondo: «Prossima volta: @<nome_del_bot> nel gruppo
-<PV_GRUPPO>, 6 persone nel roster, frasi di «Nessuna»: <quante>, domanda «Prossima volta?»». Un roster, un
+<PV_GRUPPO>, 6 persone nel roster, frasi di «Nessuna»: <quante>, domanda «Prossima volta?», giorni di sempre: lun mar mer gio ven dom». Un roster, un
 file delle frasi o un valore di `prossima.env` sbagliato ferma l'avvio con una riga «configurazione: …» che dice cosa
 correggere. Dopo aver corretto: `docker compose up -d`. Il riavvio automatico del
 container (`restart: unless-stopped`) non rilegge `prossima.env`: Docker lo legge
@@ -100,7 +100,10 @@ secondi (`init: true` in `compose.yaml` fa arrivare il segnale a Python). Poi
 
 - Dal menu dei comandi (il tasto `/` accanto al campo di testo) scegli
   `/sondaggio`: il menu scrive `/sondaggio@<nome_del_bot>`, e il sondaggio della
-  settimana seguente compare nel gruppo.
+  settimana seguente compare nel gruppo, senza il sabato (con `/sondaggio con
+  sabato` c'è anche quello).
+- Dallo stesso menu, `/aiuto`: il bot risponde con le istruzioni dei comandi.
+- Gli annunci arrivano due minuti dopo l'ultimo voto, non subito: è voluto.
 - Quando arriva il primo annuncio con dei nomi («Non hanno ancora votato: …»),
   chiedi alle persone nominate se hanno ricevuto la notifica. Il controllo
   copre due casi: una persona che ha già scritto `/start` al bot (punto 1) e
@@ -165,6 +168,21 @@ container. La riga dell'avvio nel log riporta la domanda. Al massimo 300
 caratteri, un'emoji ne vale due; con un `#` nella domanda, mettila fra
 virgolette, altrimenti Docker legge il resto come un commento. Vale dal
 sondaggio seguente: quello aperto resta com'è.
+
+## Cambiare i giorni di sempre
+
+I giorni del sondaggio senza parametri stanno in `config/prossima.env`, nella
+riga `PV_GIORNI=` (per esempio `PV_GIORNI=lun mar mer gio ven dom`; senza, tutti
+tranne il sabato). Come per la domanda, dopo averli cambiati:
+
+```bash
+docker compose up -d
+docker compose logs --tail 5 prossima
+```
+
+La riga dell'avvio nel log riporta i giorni, e `/aiuto` li dice nel gruppo
+(«sabato escluso»). Chi lancia il sondaggio aggiunge un giorno escluso con
+`/sondaggio con sabato`.
 
 ## Se il bot resta bloccato
 

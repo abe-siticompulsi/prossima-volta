@@ -5409,3 +5409,33 @@ al massimo 300 caratteri in UTF-16, controllata all'avvio senza ripeterne il
 valore nel messaggio d'errore; il bot la passa a `Invio`, che la usa per ogni
 sondaggio nuovo, anche nella ripresa e in `/chiudi rimanda`. La domanda come
 opzione di `/sondaggio`, per un sondaggio speciale, è rimandata a più avanti.
+
+### Annunci brevi, il sabato e /aiuto (2026-10-10)
+
+Dopo il primo sondaggio vero il gruppo ha trovato gli annunci prolissi: cinque
+messaggi per un voto. Il piano è `docs/superpowers/plans/2026-10-10-annunci-e-sabato.md`, la spec
+§2, §3.1, §3.5, §3.7, §3.9. Riassunto:
+
+- testi brevi, con i nomi con la maiuscola e le date dette per giorno;
+- «quasi» solo se qualcuno non ha votato e nessuna data è possibile;
+- l'attesa di 2 minuti dall'ultimo voto, in memoria;
+- un messaggio per tipo;
+- il sabato fuori dai giorni di sempre (`PV_GIORNI`, `con sabato`, giorni per intero);
+- `/aiuto`.
+
+Durante l'esecuzione:
+
+- I Task 2-5 sono andati in un commit solo. I nomi con la maiuscola rompevano le
+  stesse prove che i testi nuovi degli annunci avrebbero riscritto: due giri sulle
+  stesse prove non servivano.
+- Il codice dell'attesa è stato scritto prima delle sue prove. Le prove sono
+  arrivate subito dopo, e nove mutazioni (l'attesa tolta, l'attesa che non
+  riparte a un voto nuovo, niente raggruppamento, le regole di «quasi», l'ordine
+  per tipo, i nomi solo se noti per tutte le date, la settimana sola, chi si
+  menziona) le fanno fallire tutte.
+- `conftest.riavvia` crea il bot con `attesa_annunci=0`, così le prove degli
+  annunci restano immediate; quelle dell'attesa la chiedono.
+- In «impossibile», «per tenerla» con una sola data e «per tenerne una» con più
+  date (aggiunto alla spec).
+- La prova del messaggio che non è un comando usava `/aiuto` come comando
+  sconosciuto: adesso usa `/start`.

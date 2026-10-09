@@ -186,7 +186,7 @@ stesso giro prima «non più», poi «possibile», poi «quasi», poi «impossib
      attuali non ci sono date con quattro giocatori. Con tre: lunedì e giovedì.
      Gio: /chiudi@<bot> 12/10 per tenerne una, /chiudi@<bot> rimanda per
      rimandare alla prossima settimana.» (la data del comando è la prima di
-     quelle con tre);
+     quelle con tre; con una sola data, «per tenerla»);
    - senza: «😬 Con i voti attuali non ci sono date con quattro giocatori, e
      nemmeno con tre. Gio: /chiudi@<bot> rimanda per rimandare alla prossima
      settimana.»

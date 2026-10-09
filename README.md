@@ -3,7 +3,8 @@
 Il bot Telegram che, nel gruppo dei *Danni Radiosi*, crea il sondaggio per la
 data della sessione seguente (`/sondaggio`), ne segue i voti e dice nel gruppo
 quando una data va bene, quando ci si è vicini e chi non ha ancora votato, e
-quando con le date proposte non ci si sta. Lo chiudono gio o abe (`/chiudi`).
+quando con le date proposte non ci si sta. Lo chiude Gio (o Abe, in emergenza)
+con `/chiudi`; `/aiuto` spiega i comandi nel gruppo.
 
 Il design sta in `docs/superpowers/specs/`, il piano in `docs/superpowers/plans/`.
 Leggi la specifica prima di cambiare il comportamento: i testi dei messaggi
