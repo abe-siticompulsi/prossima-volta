@@ -13,6 +13,7 @@ smentisce una.
 | La domanda del sondaggio (`PV_DOMANDA`) ha al massimo 300 caratteri, contati in UTF-16 come le opzioni. | Il limite è quello della documentazione di `sendPoll` (1-300 caratteri); come li conti Telegram non è scritto. | Non verificato: il piano reale manda solo domande corte. Una domanda rifiutata si vedrebbe al primo `/sondaggio`, con «Telegram non ha confermato il sondaggio» e un ERROR nel log. |
 | Un voto arriva come `poll_answer` con l'identificativo di chi vota (`user.id`) e le opzioni spuntate, contate da 0; togliere una sola data manda le opzioni rimaste (il voto intero, che sostituisce il precedente: visto dal piano reale il 2026-10-08); il voto ritirato arriva con `option_ids` vuoto. | Telegram manda i voti a un bot solo per i sondaggi non anonimi creati da lui. | Il piano reale: Alberto vota, ritira il voto e vota di nuovo. |
 | Un tocco su un bottone arriva come `callback_query` (`tests/aggiornamenti.tocco`), nel gruppo, con chi ha toccato, il dato e il messaggio. | Telegram manda i tocchi al bot anche con la privacy attiva: la documentazione dice che i bottoni lavorano «dietro le quinte», ma la sezione sulla privacy non ne parla. A un tocco vecchio (dopo un buio) non si può più rispondere. | Il piano reale (`test_un_bottone_toccato_arriva_al_bot`) nella chat privata di Alberto; nel gruppo, a mano, la prima volta che arriva «impossibile» con i bottoni. |
+| Un comando scritto come codice (`_Scrittura.codice`: in `/aiuto` e negli altri messaggi con un comando da copiare) è un'entità `code`: le prove guardano il testo e le entità. | Toccato, un codice si copia intero e non parte: lo fanno le app di Telegram, la Bot API non lo scrive. Un comando evidenziato, toccato, parte senza gli argomenti (verificato il 2026-10-10: è blu solo la parte prima dello spazio). Le app non sono tutte uguali: la prova vale per quella con cui Alberto la fa. | Il piano reale (`test_un_comando_in_codice_si_copia_intero`) nella chat privata di Alberto: manda le istruzioni di `/aiuto` con la configurazione vera, Alberto tocca «/chiudi@<bot> rimanda» e incolla nella chat quello che ha copiato. |
 | `stopPoll` restituisce i conteggi per opzione, nell'ordine delle opzioni. | L'API restituisce il `Poll` fermato, con `voter_count` per opzione («may be 0 if unknown»). | Il piano reale, dopo il voto di Alberto. |
 | Un sondaggio cancellato fa rispondere a `stopPoll` «message to stop not found», che il client riconosce come `MessaggioSparito`. | La descrizione la sceglie Telegram, e non è documentata. | `tests/reale/test_telegram_vero.py::test_fermare_un_sondaggio_cancellato`: il bot manda un sondaggio, lo cancella e prova a fermarlo. |
 | Le menzioni sono entità `text_mention` con il solo identificativo, e gli scostamenti contati in unità UTF-16 cadono sul nome. | Telegram rifiuta o sposta le entità con scostamenti sbagliati; se una menzione notifichi davvero lo vede solo una persona. | Il piano reale rilegge le entità nel messaggio che Telegram restituisce; a mano, nel gruppo: la notifica arriva. |
@@ -51,12 +52,6 @@ smentisce una.
   quando parte. La riga dell'avvio nel log dice quante frasi ha letto.
 
 ## Da controllare a mano nel gruppo
-
-- Un comando scritto come codice (in `/aiuto`, per esempio
-  «/chiudi@<bot> rimanda»), toccato, si copia intero e non parte: lo dice il
-  comportamento delle app di Telegram, non la Bot API. Un comando evidenziato,
-  toccato, parte senza gli argomenti (verificato il 2026-10-10: è blu solo la
-  parte prima dello spazio).
 
 - `/sondaggio@<bot>` scelto dal menu dei comandi arriva al bot con la privacy
   attiva, e il sondaggio compare nel gruppo.

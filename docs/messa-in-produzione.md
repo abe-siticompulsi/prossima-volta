@@ -102,13 +102,13 @@ secondi (`init: true` in `compose.yaml` fa arrivare il segnale a Python). Poi
   `/sondaggio`: il menu scrive `/sondaggio@<nome_del_bot>`, e il sondaggio della
   settimana seguente compare nel gruppo, senza il sabato (con `/sondaggio con
   sabato` c'è anche quello).
-- Dallo stesso menu, `/aiuto`: il bot risponde con le istruzioni dei comandi.
 - Gli annunci arrivano due minuti dopo l'ultimo voto, non subito: è voluto.
 - La prima volta che arriva «impossibile» con i bottoni: chi non può chiudere
   e ne tocca uno vede l'avviso «Il sondaggio lo chiude Gio (o Abe, in
   emergenza).»; il tocco di Gio fa quello che dice il bottone, e i bottoni
-  spariscono. Un comando scritto come codice (in `/aiuto`), toccato, si copia
-  invece di partire.
+  spariscono.
+- `/aiuto` non serve provarlo nel gruppo: il piano reale (punto 6) manda le
+  stesse istruzioni nella chat privata.
 - Quando arriva il primo annuncio con dei nomi («Martedì ci siamo quasi. Pippo,
   ci sei?»), chiedi alle persone nominate se hanno ricevuto la notifica. Il controllo
   copre due casi: una persona che ha già scritto `/start` al bot (punto 1) e
@@ -137,7 +137,9 @@ docker compose start prossima
 
 Un test manda nella chat privata un messaggio con un bottone e aspetta fino a
 tre minuti che tu lo tocchi: compare l'avviso «🧪 Tocco ricevuto», e il bottone
-sparisce. Un altro manda un sondaggio di prova e aspetta fino a tre minuti: fai
+sparisce. Un altro manda le istruzioni di `/aiuto` e aspetta fino a tre minuti
+che tu tocchi l'ultimo comando (quello di «rimanda»), lo incolli nella chat e lo
+mandi: il tocco deve copiarlo intero, non farlo partire. Un altro manda un sondaggio di prova e aspetta fino a tre minuti: fai
 quello che dice la domanda (spunta la prima e la terza data e vota, togli solo
 la terza, ritira il voto, spunta la seconda e vota). Il piano reale è verde solo se **non
 salta niente**: un test saltato non è un test superato, e `-rs` dice quale

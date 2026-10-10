@@ -5466,6 +5466,8 @@ Il piano è `docs/superpowers/plans/2026-10-10-bottoni.md`, la spec §3.5 (punto
   dopo il primo, non chiude due volte.
 - Con più persone che possono chiudere e un master che non può, il testo dice «Abe e Emi, decidete voi:».
 - Il piano reale chiede ad Alberto di toccare un bottone nella chat privata.
+- Il piano reale gli chiede anche di toccare un comando di `/aiuto` e di incollarlo nella chat: un codice,
+  toccato, si copia intero (prima era un controllo a mano nel gruppo).
 - La revisione del ramo ha portato:
   - con la chiusura in sospeso, un altro bottone sullo stesso messaggio cambia la decisione (il messaggio
     costruito dal tocco ha `"tocco": True`, e `Chiusure.chiudi` scarta solo lo stesso bottone);

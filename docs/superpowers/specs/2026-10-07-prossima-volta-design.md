@@ -764,11 +764,15 @@ gruppo del party. All'avvio registra i comandi (`setMyCommands`): `sondaggio`
   sondaggio con 11 opzioni (10 date e, fra le frasi che il servizio usa, quella
   con più byte), `stopPoll` su un messaggio
   cancellato e su un sondaggio già fermato (le descrizioni degli errori che il
-  client riconosce), `setMyCommands`. Salta per ogni variabile mancante
-  (`PV_BOT_TOKEN`, `PV_GRUPPO`, `PV_ROSTER`, `PV_DB`, `PV_BATTITO`,
-  `PV_REALE_CHAT`) dicendo che cosa non è verificato; se il voto di Alberto non
-  arriva in tre minuti, il fallimento suggerisce di controllare che il servizio
-  sia fermo e che il voto sia stato dato.
+  client riconosce), `setMyCommands`, un bottone toccato da Alberto che arriva
+  come `callback_query` (con la risposta al tocco e la rimozione dei bottoni),
+  le istruzioni di `/aiuto` con le entità `code` e un comando in codice che,
+  toccato, si copia intero (Alberto lo incolla nella chat). Salta per ogni
+  variabile mancante (`PV_BOT_TOKEN`, `PV_GRUPPO`, `PV_ROSTER`, `PV_DB`,
+  `PV_BATTITO`, `PV_REALE_CHAT`) dicendo che cosa non è verificato; se il voto,
+  il tocco o il comando incollato non arriva in tre minuti, il fallimento
+  suggerisce di controllare che il servizio sia fermo e che Alberto abbia fatto
+  il suo passo.
 - **A mano, nel gruppo**: `/sondaggio@<bot>` dal menu arriva al bot con la privacy
   attiva; le menzioni notificano, anche chi non ha mai scritto al bot (il piano
   reale menziona solo Alberto, che ha scritto `/start` al bot: una menzione

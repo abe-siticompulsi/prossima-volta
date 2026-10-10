@@ -10,7 +10,9 @@ Un test chiede ad Alberto di votare: la domanda del sondaggio dice cosa fare,
 e il test aspetta fino a tre minuti. Un altro gli chiede di toccare un bottone;
 il tocco resta fra gli aggiornamenti non confermati, e alla ripartenza il
 servizio prova a rispondergli: Telegram lo rifiuta perché è vecchio, e nel log
-compare un avviso «risposta al tocco non mandata». È normale.
+compare un avviso «risposta al tocco non mandata». È normale. Un terzo gli
+chiede di toccare un comando di `/aiuto` e di incollarlo nella chat: fuori dal
+gruppo il servizio non risponde a niente, nemmeno al comando incollato.
 """
 
 import os
@@ -23,7 +25,7 @@ from prossima import config, regole, testi
 from prossima.bot import COMANDI
 from prossima.regole import Persona
 from prossima.telegram import BotTelegram, MessaggioSparito, SondaggioGiaChiuso, TelegramRifiuto
-from tests.reale.ambiente import richiesta
+from tests.reale.ambiente import richiedi_la_configurazione, richiesta
 
 pytestmark = pytest.mark.reale
 
@@ -79,6 +81,26 @@ def tocco_su(b: BotTelegram, messaggio: int) -> dict:
     pytest.fail(
         f"in {ATTESA_VOTI} secondi non è arrivato nessun tocco: il servizio è davvero fermo? "
         "(due lettori si rubano gli aggiornamenti) hai toccato il bottone?"
+    )
+
+
+def messaggio_dopo(b: BotTelegram, messaggio: int) -> dict:
+    """Il primo messaggio di Alberto nella sua chat dopo il messaggio `messaggio`,
+    letto senza offset."""
+    fine = time.monotonic() + ATTESA_VOTI
+    while time.monotonic() < fine:
+        for a in b.aggiornamenti(None, 5):
+            m = a.get("message") or {}
+            if (
+                m.get("chat", {}).get("id") == chat()
+                and m.get("from", {}).get("id") == chat()
+                and m.get("message_id", 0) > messaggio
+            ):
+                return m
+        time.sleep(1)
+    pytest.fail(
+        f"in {ATTESA_VOTI} secondi non è arrivato nessun messaggio: il servizio è davvero fermo? "
+        "(due lettori si rubano gli aggiornamenti) hai incollato e mandato il comando?"
     )
 
 
@@ -195,3 +217,35 @@ def test_un_bottone_toccato_arriva_al_bot():
     assert tocco["data"] == "prova:bottone"
     b.rispondi_al_tocco(tocco["id"], "🧪 Tocco ricevuto: bottone a posto.")
     b.togli_bottoni(chat(), messaggio["message_id"])
+
+
+def test_un_comando_in_codice_si_copia_intero():
+    """Contratti: Telegram accetta le entità `code` di `/aiuto` dove le mette
+    `testi.py`; un comando scritto come codice, toccato, si copia intero, anche
+    quello che segue lo spazio (un comando evidenziato partirebbe senza). Il
+    messaggio è quello di `/aiuto` con la configurazione vera; Alberto tocca
+    l'ultimo comando e incolla nella chat quello che ha copiato: lo dice il
+    messaggio che segue, che non contiene comandi da toccare per sbaglio."""
+    richiedi_la_configurazione("un comando di /aiuto, toccato, si copia intero")
+    imp = config.da_ambiente(os.environ)
+    b = bot()
+    nome = b.io()
+    t = testi.aiuto(nome, imp.roster, imp.giorni)
+    istruzioni = b.scrivi(chat(), t.testo, t.entita)
+    assert [(e["offset"], e["length"]) for e in istruzioni["entities"] if e["type"] == "code"] == [
+        (e["offset"], e["length"]) for e in t.entita
+    ]
+    rimanda = f"/chiudi@{nome} rimanda"
+    assert t.testo.endswith(f"{rimanda} — chiude e rifà il sondaggio sulla settimana dopo")
+    domanda = b.scrivi(
+        chat(),
+        "🧪 Prova di Prossima volta: qui sopra tocca l'ultimo comando, quello che finisce con "
+        "«rimanda»; poi incollalo qui e manda.",
+    )
+    incollato = (messaggio_dopo(b, domanda["message_id"]).get("text") or "").strip()
+    if "rimanda" not in incollato:
+        pytest.fail(
+            f"è arrivato «{incollato}», senza «rimanda»: il tocco ha mandato il comando invece di "
+            "copiarlo intero?"
+        )
+    assert incollato == rimanda
