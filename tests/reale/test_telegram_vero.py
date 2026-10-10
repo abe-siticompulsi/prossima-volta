@@ -118,10 +118,16 @@ def test_i_comandi_del_menu():
 
 def test_una_menzione_dopo_un_emoji_cade_sul_nome():
     """Contratto: Telegram conta gli scostamenti delle entità in UTF-16, come
-    `testi.py`, e accetta una `text_mention` con il solo identificativo."""
-    alberto = Persona("abe", chat(), "giocatore")
+    `testi.py` (😬 ne vale due), e accetta una `text_mention` con il solo
+    identificativo. Il testo è quello di «impossibile», con Alberto al posto
+    del master, senza i bottoni (hanno la loro prova)."""
+    alberto = Persona("abe", chat(), regole.MASTER, chiude=True)
     altri = tuple(Persona(n, 100000001 + i, "giocatore") for i, n in enumerate(("gio", "emi", "sem", "sese")))
-    t = testi.quasi(regole.Quasi(date.today() + timedelta(days=7), altri, (alberto,)))
+    giorno = date.today() + timedelta(days=7)
+    t = testi.annunci(
+        [regole.Impossibile(((giorno, altri[:3]),))], regole.Roster((alberto, *altri)), bot().io(), [giorno], 1
+    )
+    assert t.testo.startswith("😬") and t.entita[0]["offset"] == t.testo.index("Abe") + 1
     messaggio = bot().scrivi(chat(), t.testo, t.entita)
     [entita] = messaggio["entities"]
     assert entita["type"] == "text_mention"

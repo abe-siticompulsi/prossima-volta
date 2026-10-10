@@ -5480,3 +5480,11 @@ Il piano è `docs/superpowers/plans/2026-10-10-bottoni.md`, la spec §3.5 (punto
   - `testi.annunci` senza il sondaggio, per «impossibile», è un errore;
   - le prove che mancavano: il tocco con la ripresa che aspetta di riaprire, la pausa di un 429, il
     «Rimanda» vecchio dopo un rimanda scritto, l'argomento vuoto.
+
+### Il piano reale dopo gli annunci brevi (2026-10-10)
+
+Il primo giro sul server dopo annunci e bottoni: 10 prove su 11. `test_una_menzione_dopo_un_emoji_cade_sul_nome`
+usava ancora `testi.quasi`, tolta con gli annunci brevi; le prove veloci non importano il piano reale e non se ne
+sono accorte. Il «quasi» nuovo non ha più emoji, quindi la prova ora menziona Alberto nel testo di «impossibile»,
+che comincia con 😬 (due unità UTF-16). `tests/test_piano_reale.py`, fra le prove veloci, controlla che i nomi dei
+moduli di `prossima` usati dal piano reale esistano ancora.
