@@ -5488,3 +5488,10 @@ usava ancora `testi.quasi`, tolta con gli annunci brevi; le prove veloci non imp
 sono accorte. Il «quasi» nuovo non ha più emoji, quindi la prova ora menziona Alberto nel testo di «impossibile»,
 che comincia con 😬 (due unità UTF-16). `tests/test_piano_reale.py`, fra le prove veloci, controlla che i nomi dei
 moduli di `prossima` usati dal piano reale esistano ancora.
+
+### /aiuto in privato (2026-10-15)
+
+Alberto voleva leggere le istruzioni senza scrivere nel gruppo. Ora il bot risponde ad `/aiuto` anche in una chat
+privata, ma solo a chi è nel roster, con la posta (la stessa coda del gruppo, verso quella chat); in privato
+tutto il resto si ignora come prima. Il menu dei comandi delle chat private (`setMyCommands` con `scope`
+`all_private_chats`) mostra solo `/aiuto`. Il testo è lo stesso del gruppo.

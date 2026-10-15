@@ -12,7 +12,7 @@ il tocco resta fra gli aggiornamenti non confermati, e alla ripartenza il
 servizio prova a rispondergli: Telegram lo rifiuta perché è vecchio, e nel log
 compare un avviso «risposta al tocco non mandata». È normale. Un terzo gli
 chiede di toccare un comando di `/aiuto` e di incollarlo nella chat: fuori dal
-gruppo il servizio non risponde a niente, nemmeno al comando incollato.
+gruppo il servizio risponde solo ad `/aiuto`, quindi non al comando incollato.
 """
 
 import os
@@ -22,7 +22,7 @@ from datetime import date, timedelta
 import pytest
 
 from prossima import config, regole, testi
-from prossima.bot import COMANDI
+from prossima.bot import COMANDI, COMANDI_IN_PRIVATO
 from prossima.regole import Persona
 from prossima.telegram import BotTelegram, MessaggioSparito, SondaggioGiaChiuso, TelegramRifiuto
 from tests.reale.ambiente import richiedi_la_configurazione, richiesta
@@ -109,11 +109,16 @@ def test_il_nome_del_bot():
 
 
 def test_i_comandi_del_menu():
+    """Contratto: il menu di sempre, e quello delle chat private (solo /aiuto),
+    con `scope`; `getMyCommands` li rilegge tutti e due."""
     b = bot()
     b.registra_comandi(COMANDI)
+    b.registra_comandi(COMANDI_IN_PRIVATO, "all_private_chats")
     # getMyCommands al bot non serve: lo si chiama qui solo per rileggere.
     letti = b._chiama("getMyCommands")
     assert [(c["command"], c["description"]) for c in letti] == list(COMANDI)
+    privati = b._chiama("getMyCommands", {"scope": {"type": "all_private_chats"}})
+    assert [(c["command"], c["description"]) for c in privati] == list(COMANDI_IN_PRIVATO)
 
 
 def test_una_menzione_dopo_un_emoji_cade_sul_nome():

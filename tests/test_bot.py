@@ -10,7 +10,7 @@ from prossima.store import NonConfermato
 from prossima.telegram import TelegramRifiuto, TelegramTroppeRichieste
 from tests.aggiornamenti import GRUPPO, comando, fino_al, risposta, vota
 from tests.finti import telegram_guasto
-from tests.tavolo import ABE, EMI, ESTRANEO, GIO, PIPPO, SEM, SESE, d
+from tests.tavolo import ABE, EMI, ESTRANEO, GIO, PIPPO, ROSTER, SEM, SESE, d
 
 FRASE = testi.FRASI_NESSUNA[0]  # `caso` sceglie la prima restante
 SETTIMANA = ["lun 13/10", "mar 14/10", "mer 15/10", "gio 16/10", "ven 17/10", "dom 19/10"]
@@ -75,11 +75,33 @@ def test_il_nome_del_bot_non_conta_le_maiuscole(bot, telegram):
     assert telegram.ultimo_sondaggio["opzioni"] == ["mar 14/10", FRASE]
 
 
-def test_fuori_dal_gruppo_non_risponde_a_niente(bot, telegram, store):
+def test_fuori_dal_gruppo_risponde_solo_ad_aiuto(bot, telegram, store):
     privata = GIO.telegram_id
     bot.ricevi([comando("/sondaggio", chat=privata), comando("/sondaggio 32/10", chat=privata)])
+    bot.ricevi([comando("/chiudi", chat=privata), comando("/start", chat=privata)])
     assert telegram.chiamate == []
     assert store.sondaggio_aperto() is None
+
+
+def test_in_privato_aiuto_risponde_a_chi_e_nel_roster(bot, telegram):
+    """Alberto (15/10): le istruzioni senza scrivere nel gruppo. In privato il
+    bot risponde solo ad /aiuto, e solo a chi è nel roster."""
+    bot.ricevi([comando("/aiuto", da=EMI.telegram_id, chat=EMI.telegram_id)])
+    [scritto] = telegram.di_tipo("scrivi")
+    assert scritto["chat_id"] == EMI.telegram_id
+    assert scritto["risposta_a"] is None
+    assert scritto["testo"].startswith("Come si usa:\n/sondaggio@ProssimaVoltaBot — ")
+    assert scritto["entita"] == list(testi.aiuto("ProssimaVoltaBot", ROSTER, (0, 1, 2, 3, 4, 6)).entita)
+
+
+def test_in_privato_chi_non_e_nel_roster_non_riceve_niente(bot, telegram):
+    bot.ricevi([comando("/aiuto", da=ESTRANEO, chat=ESTRANEO)])
+    assert telegram.chiamate == []
+
+
+def test_aiuto_in_un_altro_gruppo_si_ignora(bot, telegram):
+    bot.ricevi([comando("/aiuto@ProssimaVoltaBot", da=EMI.telegram_id, chat=-5555)])
+    assert telegram.chiamate == []
 
 
 def test_un_messaggio_che_non_e_un_comando_si_ignora(bot, telegram):

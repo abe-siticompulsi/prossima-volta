@@ -148,7 +148,9 @@ def test_all_avvio_chiede_il_nome_e_registra_i_comandi(tmp_path):
                 ("chiudi", "Chiude il sondaggio"),
                 ("aiuto", "Come si usano i comandi"),
             ]
-        }
+        },
+        # in privato il bot risponde solo ad /aiuto: il menu mostra solo quello
+        {"comandi": [("aiuto", "Come si usano i comandi")], "ambito": "all_private_chats"},
     ]
     assert (tmp_path / "prossima.sqlite").exists()
 

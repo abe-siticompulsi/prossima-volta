@@ -193,6 +193,15 @@ def test_registra_comandi():
     }
 
 
+def test_registra_comandi_per_le_chat_private():
+    viste, gestore = registra(True)
+    bot_con(gestore).registra_comandi([("aiuto", "Come si usano i comandi")], "all_private_chats")
+    assert corpo(viste[0]) == {
+        "commands": [{"command": "aiuto", "description": "Come si usano i comandi"}],
+        "scope": {"type": "all_private_chats"},
+    }
+
+
 def test_un_429_dice_quanto_aspettare():
     bot = bot_con(
         lambda r: rifiuto(429, "Too Many Requests: retry after 7", parameters={"retry_after": 7})

@@ -127,8 +127,9 @@ class TelegramFinto:
         self._registra("togli_bottoni", chat_id=chat_id, messaggio=messaggio)
         return self._risposta("togli_bottoni", None)
 
-    def registra_comandi(self, comandi):
-        self._registra("registra_comandi", comandi=list(comandi))
+    def registra_comandi(self, comandi, ambito=None):
+        extra = {"ambito": ambito} if ambito else {}
+        self._registra("registra_comandi", comandi=list(comandi), **extra)
         return self._risposta("registra_comandi", None)
 
     # --- per le prove

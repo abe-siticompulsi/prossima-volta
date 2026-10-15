@@ -98,7 +98,8 @@ e ignora i comandi rivolti ad altri bot.
   una risposta illeggibile; non durante la pausa, non dopo un rifiuto), il bot
   ricorda il momento del tentativo e i suoi argomenti: servono per i voti a un
   sondaggio sconosciuto (§4).
-- **Fuori dal gruppo configurato** il bot non risponde a niente.
+- **Fuori dal gruppo configurato** il bot non risponde a niente, salvo `/aiuto` in
+  una chat privata a chi è nel roster (§3.9).
 
 ### 3.2 Il sondaggio
 
@@ -518,7 +519,10 @@ stop della ripresa che Telegram ha rifiutato (4xx). Caso raro, accettato.
 
 ### 3.9 Le istruzioni: `/aiuto`
 
-Chiunque nel gruppo, `/aiuto@<bot>`. Il bot risponde al comando con:
+Chiunque nel gruppo, `/aiuto@<bot>`; oppure, in privato, chi è nel roster: le
+istruzioni senza scrivere nel gruppo (Alberto, 15/10/2026). In privato il bot
+risponde solo ad `/aiuto`, e il menu dei comandi delle chat private mostra solo
+quello. Il bot risponde al comando con:
 
 ```
 Come si usa:

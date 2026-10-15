@@ -138,8 +138,12 @@ class Invio:
     def lettere(self, testi_: Sequence[testi.Testo]) -> list[LetteraNuova]:
         return [self.lettera(t) for t in testi_]
 
-    def accoda(self, testo: testi.Testo, risposta_a: int | None = None) -> None:
-        self._store.accoda(self._gruppo, testo.testo, testo.entita, risposta_a, self._adesso())
+    def accoda(
+        self, testo: testi.Testo, risposta_a: int | None = None, chat_id: int | None = None
+    ) -> None:
+        """Nella posta: per il gruppo, o per la chat `chat_id` (le istruzioni in privato)."""
+        destinatario = self._gruppo if chat_id is None else chat_id
+        self._store.accoda(destinatario, testo.testo, testo.entita, risposta_a, self._adesso())
 
     def manda_posta(self) -> None:
         for lettera in self._store.posta():

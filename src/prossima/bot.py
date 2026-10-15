@@ -52,6 +52,8 @@ COMANDI = (
     ("chiudi", "Chiude il sondaggio"),
     ("aiuto", "Come si usano i comandi"),
 )
+# In privato il bot risponde solo ad /aiuto, e solo al roster: il menu mostra solo quello.
+COMANDI_IN_PRIVATO = (("aiuto", "Come si usano i comandi"),)
 # Gli annunci aspettano che i voti si assestino (spec §3.5).
 ATTESA_ANNUNCI = timedelta(minutes=2)
 # Un voto per un sondaggio sconosciuto si dice nel gruppo solo se un sondaggio
@@ -182,7 +184,8 @@ class Bot:
 
     def _messaggio(self, messaggio: dict) -> None:
         if messaggio.get("chat", {}).get("id") != self._gruppo:
-            return  # fuori dal gruppo del party il bot non risponde a niente
+            self._in_privato(messaggio)
+            return
         parole = (messaggio.get("text") or "").split()
         if not parole:
             return
@@ -196,6 +199,17 @@ class Bot:
                 testi.aiuto(self._nome, self._roster, self._giorni),
                 risposta_a=messaggio["message_id"],
             )
+
+    def _in_privato(self, messaggio: dict) -> None:
+        """Fuori dal gruppo del party il bot risponde solo ad /aiuto, in una chat
+        privata e a chi è nel roster: le istruzioni senza scrivere nel gruppo
+        (Alberto, 15/10). Tutto il resto si ignora."""
+        chat = messaggio.get("chat", {})
+        if chat.get("type") != "private" or self._roster.per_id(messaggio.get("from", {}).get("id")) is None:
+            return
+        parole = (messaggio.get("text") or "").split()
+        if parole and self._comando(parole[0]) == "aiuto":
+            self._invio.accoda(testi.aiuto(self._nome, self._roster, self._giorni), chat_id=chat["id"])
 
     def _tocco(self, tocco: dict) -> None:
         """Un tocco su un bottone di «impossibile» (§3.10): per chi può chiudere,

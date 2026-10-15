@@ -107,8 +107,10 @@ secondi (`init: true` in `compose.yaml` fa arrivare il segnale a Python). Poi
   e ne tocca uno vede l'avviso «Il sondaggio lo chiude Gio (o Abe, in
   emergenza).»; il tocco di Gio fa quello che dice il bottone, e i bottoni
   spariscono.
-- `/aiuto` non serve provarlo nel gruppo: il piano reale (punto 6) manda le
-  stesse istruzioni nella chat privata.
+- `/aiuto` non serve provarlo nel gruppo: scrivilo al bot in privato (il bot
+  risponde, in privato, solo ad `/aiuto` e solo a chi è nel roster; il menu
+  delle chat private mostra solo quello). Lo stesso testo lo manda anche il
+  piano reale (punto 6).
 - Quando arriva il primo annuncio con dei nomi («Martedì ci siamo quasi. Pippo,
   ci sei?»), chiedi alle persone nominate se hanno ricevuto la notifica. Il controllo
   copre due casi: una persona che ha già scritto `/start` al bot (punto 1) e

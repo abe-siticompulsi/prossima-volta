@@ -201,8 +201,12 @@ class BotTelegram:
             raise
         return [opzione["voter_count"] for opzione in sondaggio["options"]]
 
-    def registra_comandi(self, comandi: Sequence[tuple[str, str]]) -> None:
-        self._chiama(
-            "setMyCommands",
-            {"commands": [{"command": c, "description": d} for c, d in comandi]},
-        )
+    def registra_comandi(
+        self, comandi: Sequence[tuple[str, str]], ambito: str | None = None
+    ) -> None:
+        """Il menu dei comandi; con `ambito` (per esempio «all_private_chats»), solo
+        per quelle chat."""
+        corpo: dict[str, Any] = {"commands": [{"command": c, "description": d} for c, d in comandi]}
+        if ambito is not None:
+            corpo["scope"] = {"type": ambito}
+        self._chiama("setMyCommands", corpo)

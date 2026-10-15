@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from . import config, regole, sblocco
-from .bot import COMANDI, Bot
+from .bot import COMANDI, COMANDI_IN_PRIVATO, Bot
 from .store import Store
 from .telegram import BotTelegram, TelegramError, TelegramTroppeRichieste
 
@@ -134,6 +134,7 @@ def avvia(env: Mapping[str, str], *, telegram=None, fermo: threading.Event | Non
     telegram = telegram or BotTelegram(imp.token_bot)
     nome = telegram.io()
     telegram.registra_comandi(COMANDI)
+    telegram.registra_comandi(COMANDI_IN_PRIVATO, "all_private_chats")
     bot = Bot(
         telegram=telegram,
         store=store,
