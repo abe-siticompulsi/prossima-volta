@@ -263,10 +263,7 @@ class Bot:
         autore = messaggio.get("from") or {}
         persona = self._roster.per_id(autore.get("id"))
         chi = testi.nome(persona) if persona else (autore.get("first_name") or "").strip()
-        aperto = self._store.sondaggio_aperto()
-        incerto = self._store.ripresa() is not None or (
-            aperto is not None and self._in_chiusura(aperto)
-        )
+        incerto = self._fatti_incerti()
         domanda = Domanda(
             chat, messaggio["message_id"], chi, messaggio["text"], del_bot, self._fatti(), citata
         )
@@ -275,6 +272,13 @@ class Bot:
                 "risposta con la frase fissa: %s", "fatti incerti" if incerto else "fila piena"
             )
             self._invio.accoda(testi.non_riesco(), risposta_a=risposta_a, chat_id=chat)
+
+    def _fatti_incerti(self) -> bool:
+        """Il sondaggio forse è già fermo: una chiusura in sospeso, una ripresa."""
+        aperto = self._store.sondaggio_aperto()
+        return self._store.ripresa() is not None or (
+            aperto is not None and self._in_chiusura(aperto)
+        )
 
     def _fatti(self) -> Fatti:
         ultimo = self._store.ultimo_sondaggio()
@@ -288,7 +292,9 @@ class Bot:
             return
         for domanda, esito in self._rispondente.pronte():
             testo = esito.testo
-            if esito.dai_fatti and esito.tipo is not None:
+            if esito.dai_fatti and self._fatti_incerti():
+                testo = testi.non_riesco()  # il sondaggio è diventato incerto nel frattempo
+            elif esito.dai_fatti and esito.tipo is not None:
                 adesso = self._fatti()
                 if adesso != domanda.fatti:
                     log.info("i fatti sono cambiati: la risposta è quella del codice")

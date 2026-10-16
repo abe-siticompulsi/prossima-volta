@@ -207,7 +207,9 @@ def risposta_del_codice(
         case "voto":
             return testi.risposta_senza_sondaggio()
         case "chiusura":
-            return Testo(f"{_maiuscola(testi.chi_chiude(roster))}, quando decide.")
+            chi_chiude = testi.chi_chiude(roster)
+            verbo = "decidono" if chi_chiude.startswith("chiudono") else "decide"
+            return Testo(f"{_maiuscola(chi_chiude)}, quando {verbo}.")
         case "non_so":
             return Testo(f"Questo non lo so: chiedi a {master}.")
         case "altro":
@@ -399,7 +401,7 @@ def scrivi(d: Domanda, chiedi: Chiedi, roster: Roster, modelli: Modelli = MODELL
     del_codice = risposta_del_codice(tipo, giorno, d.testo, d.chi, d.fatti, roster)
     soprannomi = [p.soprannome for p in roster.persone]
     if del_codice is None:
-        vietati = [s for s in soprannomi if s != d.chi.lower()]
+        vietati = [s for s in soprannomi if s.lower() != d.chi.lower()]
         try:
             battuta = _tentativi(
                 chiedi, modelli.testo, *per_la_battuta(d, roster),

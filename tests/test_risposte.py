@@ -291,3 +291,26 @@ def test_la_battuta_che_non_passa_e_quella_di_riserva():
 def test_ollama_giu_o_il_tipo_illeggibile_danno_la_frase_fissa(fila):
     esito = scrivi(domanda(), Finto(**fila), ROSTER, MODELLI)
     assert esito.testo == testi.non_riesco() and not esito.dai_fatti
+
+
+def test_chiusura_al_plurale_se_chiudono_in_tanti():
+    from prossima.regole import Persona, Roster
+
+    roster = Roster(
+        (
+            Persona("gio", 1, "master"),
+            Persona("abe", 2, "giocatore", True),
+            Persona("emi", 3, "giocatore", True),
+        )
+    )
+    t = risposta_del_codice("chiusura", None, "Chi chiude?", "Sem", NIENTE, roster)
+    assert t.testo == "Chiudono Abe e Emi, quando decidono."
+
+
+def test_nella_battuta_chi_scrive_si_puo_nominare_anche_con_la_maiuscola_nel_roster():
+    from prossima.regole import Persona, Roster
+
+    roster = Roster((Persona("Gio", 1, "master", True), Persona("abe", 2, "giocatore")))
+    finto = Finto(tipo=[tipo("battuta")], testo=["Sveglissimo, Gio!"])
+    esito = scrivi(domanda("Sei sveglio?", chi="Gio"), finto, roster, MODELLI)
+    assert esito.testo == testi.Testo("Sveglissimo, Gio!")

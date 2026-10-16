@@ -65,7 +65,9 @@ def test_basta_una_delle_due_sul_sondaggio_aperto_per_chiuderlo(store, tmp_path,
         store.inizia_ripresa(INIZIO, [], aperto.id)
     esito, righe = sblocca(tmp_path, caplog)
     assert esito == 0
-    assert righe[-1].startswith(f"sblocca: chiuso nel database il sondaggio {aperto.id} (mar 14/10)")
+    assert righe[-1].startswith(
+        f"sblocca: chiuso nel database il sondaggio {aperto.id} (mar 14/10)"
+    )
     assert store.sondaggio_aperto() is None
 
 
@@ -109,3 +111,21 @@ def test_senza_database_non_crea_niente(tmp_path, caplog, env, scritto):
     with caplog.at_level(logging.ERROR):
         assert principale.main(["sblocca"], env) == 2
     assert scritto in caplog.text
+
+
+def test_sblocca_su_un_database_di_prima_della_data_scelta(tmp_path, caplog):
+    import sqlite3
+
+    with sqlite3.connect(tmp_path / "prossima.sqlite") as c:
+        c.execute(
+            "CREATE TABLE sondaggi (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, "
+            "poll_id TEXT NOT NULL, messaggio INTEGER NOT NULL, frase TEXT NOT NULL, "
+            "fatti TEXT NOT NULL DEFAULT '{}', aperto_alle TEXT NOT NULL, chiuso_alle TEXT, "
+            "chiuso_da INTEGER, date_iniziali TEXT NOT NULL, poll_prima TEXT, date_prima TEXT)"
+        )
+        c.execute(
+            "INSERT INTO sondaggi (date, poll_id, messaggio, frase, aperto_alle, date_iniziali) "
+            "VALUES ('[\"2025-10-14\"]', 'p', 1, 'N', '2025-10-07T18:00:00+00:00', '[\"2025-10-14\"]')"
+        )
+    esito, _ = sblocca(tmp_path, caplog)
+    assert esito == 0

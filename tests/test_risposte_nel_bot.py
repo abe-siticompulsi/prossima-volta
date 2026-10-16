@@ -222,3 +222,15 @@ def test_sta_scrivendo_non_riuscito_non_ferma_niente(bot, telegram, rispondente)
     rispondente.finisci(rispondente.domande[0], Esito(testi.Testo("Eccomi"), "battuta"))
     bot.ricevi([])
     assert telegram.scritti() == ["Eccomi"]
+
+
+def test_se_il_sondaggio_diventa_incerto_mentre_scrive_la_frase_fissa(bot, telegram, rispondente):
+    bot.ricevi([comando("/sondaggio mar gio")])
+    bot.ricevi([scritto("Allora?", citato=del_bot(600, "x"))])
+    [domanda] = rispondente.domande
+    telegram.guasti["ferma_sondaggio"] = telegram_guasto("ferma_sondaggio")
+    bot.ricevi([comando("/chiudi")])
+    prima = len(telegram.scritti())
+    rispondente.finisci(domanda, Esito(testi.Testo("Ancora aperto."), "data", None, True))
+    bot.ricevi([])
+    assert telegram.scritti()[prima:] == ["Ora non riesco a rispondere: riprova più tardi."]

@@ -40,7 +40,7 @@ I fatti vengono **dall'ultimo sondaggio**: quello aperto oppure, se non c'è, l'
 | `data` | chiuso, data scelta passata | «Si è giocato giovedì 16/10. Per la prossima volta non c'è ancora un sondaggio.» |
 | `data` | chiuso senza data, date possibili da oggi in poi | «Il sondaggio è chiuso: si può fare martedì 14/10 o giovedì 16/10. Gio, a te la scelta.» |
 | `data` | chiuso senza data, nessuna data possibile (o tutte passate) | «Il sondaggio è chiuso senza una data. Per la prossima volta serve un sondaggio nuovo.» |
-| `chi_c_e` | con un sondaggio | lo stato del giorno: «Giovedì 16/10: si può fare. L'hanno votata Gio, Abe, …», e a sondaggio aperto chi non ha ancora votato |
+| `chi_c_e` | con un sondaggio | lo stato del giorno: «Giovedì 16/10: si può fare. L'hanno votata Gio, Abe, …», e, a sondaggio aperto e se la data non si può ancora fare, chi non ha ancora votato |
 | `voto` | aperto | «Sem, conta solo il sondaggio: aggiorna lì il tuo voto.» |
 | `voto` | chiuso | «Sese, il sondaggio è chiuso. Gio, non faccio valutazioni: lascio a te le decisioni (ehi, ho fatto la rima)!», con «Gio» menzione del master |
 | `chiusura` | — | «Chiude Gio (o Abe, in emergenza), quando decide.» |

@@ -192,6 +192,21 @@ altro, scrivi quello). Poi `docker compose up -d`. Nel log dell'avvio: «rispost
 con Ollama: tipo da llama3:latest, testo da gemma3:12b»; senza la riga, «risposte
 spente».
 
+I sondaggi chiusi prima di questo rilascio non hanno la data scelta (la colonna
+`scelta` nasce vuota). Se l'ultimo era stato chiuso con `/chiudi <data>`, il bot
+risponderebbe «si può fare …, Gio, a te la scelta» invece di «si gioca …». Una
+volta, a servizio fermo, con la data giusta al posto di `2026-10-16`:
+
+```bash
+docker compose stop prossima
+docker compose run --rm prossima python -c "import sqlite3; c = sqlite3.connect('/data/prossima.sqlite'); c.execute(\"ALTER TABLE sondaggi ADD COLUMN scelta TEXT\") if 'scelta' not in [r[1] for r in c.execute('PRAGMA table_info(sondaggi)')] else None; c.execute(\"UPDATE sondaggi SET scelta = '2026-10-16' WHERE id = (SELECT max(id) FROM sondaggi) AND chiuso_alle IS NOT NULL\"); c.commit()"
+docker compose start prossima
+```
+
+Senza Ollama (per esempio in un'altra installazione): `compose.yaml` vuole
+comunque la rete `ollama`, perché è dichiarata esterna. Creala vuota con il primo
+comando qui sopra, oppure togli le righe `networks` dal file.
+
 Per provarle senza scrivere nel gruppo: scrivi al bot in privato («Quando si
 gioca?», «Chi c'è giovedì?», «Ciao bot!»). Compare «sta scrivendo…» e, dopo da
 qualche secondo a più di un minuto (con i modelli a freddo), la risposta. Nel

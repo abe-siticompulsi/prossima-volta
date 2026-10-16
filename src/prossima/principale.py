@@ -217,7 +217,9 @@ def _sblocca(env: Mapping[str, str]) -> int:
     if not Path(percorso).is_file():
         log.error("il database %s non c'è", percorso)
         return 2
-    fatto = sblocco.sblocca(Store(percorso), datetime.now(UTC))
+    store = Store(percorso)
+    store.crea_schema()  # un database di prima delle risposte prende la colonna `scelta`
+    fatto = sblocco.sblocca(store, datetime.now(UTC))
     for riga in fatto or ["niente da sbloccare: nessuna chiusura in sospeso, nessuna ripresa"]:
         log.info("sblocca: %s", riga)
     return 0
