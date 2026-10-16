@@ -525,3 +525,42 @@ def riapro(votanti: Sequence[Persona], senza_voto: Sequence[Persona]) -> Testo:
 
 def date_passate() -> Testo:
     return Testo("Le date del sondaggio sono passate: lo chiudo.")
+
+
+# --- le risposte (spec 2026-10-17)
+
+NON_RIESCO = "Ora non riesco a rispondere: riprova più tardi."
+# Per una battuta che non passa i controlli: il testo è di Alberto, emoji compresa.
+BATTUTA_DI_RISERVA = (
+    "Mi dispiace, non posso risponderti. Io sono bravo a contare i voti; "
+    "per il resto, faccio quello che posso. 😉️"
+)
+
+
+def non_riesco() -> Testo:
+    return Testo(NON_RIESCO)
+
+
+def battuta_di_riserva() -> Testo:
+    return Testo(BATTUTA_DI_RISERVA)
+
+
+def risposta_senza_sondaggio() -> Testo:
+    return (
+        _Scrittura()
+        .testo("Non c'è ancora un sondaggio: lancialo con ")
+        .codice("/sondaggio")
+        .testo(".")
+        .fatto()
+    )
+
+
+def voto_a_sondaggio_chiuso(chi: str, master: Persona) -> Testo:
+    """Il testo è di Alberto: il master menzionato, perché la decisione è sua."""
+    return (
+        _Scrittura()
+        .testo(f"{chi}, il sondaggio è chiuso. ")
+        .menzione(master)
+        .testo(", non faccio valutazioni: lascio a te le decisioni (ehi, ho fatto la rima)!")
+        .fatto()
+    )

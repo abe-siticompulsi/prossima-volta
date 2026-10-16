@@ -470,3 +470,28 @@ def test_in_aiuto_tutti_i_comandi_sono_codice():
 def test_impossibile_senza_il_sondaggio_non_fa_bottoni_morti():
     with pytest.raises(ValueError):
         testi.annunci([regole.Impossibile(())], ROSTER, NOME, SETTIMANA_PROVE)
+
+
+# --- le risposte (spec 2026-10-17)
+
+
+def test_la_risposta_senza_sondaggio_ha_il_comando_in_codice():
+    t = testi.risposta_senza_sondaggio()
+    assert t.testo == "Non c'è ancora un sondaggio: lancialo con /sondaggio."
+    assert t.entita == ({"type": "code", "offset": 42, "length": 10},)
+
+
+def test_il_voto_a_sondaggio_chiuso_menziona_il_master():
+    t = testi.voto_a_sondaggio_chiuso("Sese", GIO)
+    assert t.testo == (
+        "Sese, il sondaggio è chiuso. Gio, non faccio valutazioni: "
+        "lascio a te le decisioni (ehi, ho fatto la rima)!"
+    )
+    assert t.entita == (
+        {"type": "text_mention", "offset": 29, "length": 3, "user": {"id": GIO.telegram_id}},
+    )
+
+
+def test_le_frasi_fisse_delle_risposte():
+    assert testi.non_riesco().testo == "Ora non riesco a rispondere: riprova più tardi."
+    assert testi.battuta_di_riserva().testo.endswith("faccio quello che posso. 😉️")
