@@ -174,6 +174,13 @@ class Invio:
         except TelegramError as e:
             log.warning("risposta al tocco non mandata: %s", e)
 
+    def sta_scrivendo(self, chat_id: int) -> None:
+        """Al meglio: è solo un segno che la risposta arriva."""
+        try:
+            self._invia(self._tg.azione, chat_id)
+        except TelegramError as e:
+            self.avvisa("«sta scrivendo…» non mandato: %s", e)
+
     def togli_bottoni(self, messaggio: int) -> None:
         """Al meglio: un bottone rimasto, toccato, dice che il sondaggio è già chiuso."""
         try:

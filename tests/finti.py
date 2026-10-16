@@ -28,6 +28,7 @@ API = {
     "togli_bottoni": "editMessageReplyMarkup",
     "ferma_sondaggio": "stopPoll",
     "registra_comandi": "setMyCommands",
+    "azione": "sendChatAction",
 }
 
 
@@ -126,6 +127,10 @@ class TelegramFinto:
     def togli_bottoni(self, chat_id, messaggio):
         self._registra("togli_bottoni", chat_id=chat_id, messaggio=messaggio)
         return self._risposta("togli_bottoni", None)
+
+    def azione(self, chat_id, azione="typing"):
+        self._registra("azione", chat_id=chat_id, azione=azione)
+        return self._risposta("azione", None)
 
     def registra_comandi(self, comandi, ambito=None):
         extra = {"ambito": ambito} if ambito else {}

@@ -41,10 +41,14 @@ class TelegramACicli(TelegramFinto):
 
 
 class BotFinto:
-    def __init__(self, store, esplodi=False):
+    def __init__(self, store, esplodi=False, occupato=()):
         self.lotti = []
         self._store = store
         self._esplodi = esplodi
+        self._occupato = list(occupato)  # per giro: il rispondente lavora
+
+    def occupato(self):
+        return self._occupato.pop(0) if self._occupato else False
 
     def ricevi(self, aggiornamenti):
         self.lotti.append([a["update_id"] for a in aggiornamenti])
@@ -92,10 +96,14 @@ def test_il_ciclo_passa_i_lotti_al_bot_con_l_offset_salvato(store, tmp_path):
 
 def test_un_errore_di_telegram_o_del_bot_non_ferma_il_ciclo(store, tmp_path, caplog):
     fermo = threading.Event()
-    telegram = TelegramACicli(fermo, [TelegramError("getUpdates: errore di rete"), [{"update_id": 1}], [{"update_id": 2}]])
+    telegram = TelegramACicli(
+        fermo, [TelegramError("getUpdates: errore di rete"), [{"update_id": 1}], [{"update_id": 2}]]
+    )
     bot = BotFinto(store, esplodi=True)
     with caplog.at_level(logging.WARNING):
-        principale.ciclo(telegram, bot, store, tmp_path / "battito", fermo, attesa=0, pausa_errore=0)
+        principale.ciclo(
+            telegram, bot, store, tmp_path / "battito", fermo, attesa=0, pausa_errore=0
+        )
     assert bot.lotti == [[1], [2], []]
     assert "lettura del bot non riuscita: getUpdates: errore di rete" in caplog.text
     assert "errore inatteso" in caplog.text
@@ -340,8 +348,12 @@ def test_avvia_usa_le_frasi_di_pv_frasi(tmp_path, caplog):
     fermo = threading.Event()
     telegram = TelegramACicli(fermo, [[comando("/sondaggio mar")]])
     with caplog.at_level(logging.INFO, logger="prossima"):
-        principale.avvia({**ambiente(tmp_path), "PV_FRASI": str(frasi)}, telegram=telegram, fermo=fermo)
-    assert [s["opzioni"][-1] for s in telegram.di_tipo("manda_sondaggio")] == ["Nessuna: solo questa"]
+        principale.avvia(
+            {**ambiente(tmp_path), "PV_FRASI": str(frasi)}, telegram=telegram, fermo=fermo
+        )
+    assert [s["opzioni"][-1] for s in telegram.di_tipo("manda_sondaggio")] == [
+        "Nessuna: solo questa"
+    ]
     assert "frasi di «Nessuna»: 1" in caplog.text
 
 
@@ -349,7 +361,9 @@ def test_avvia_usa_la_domanda_di_pv_domanda(tmp_path, caplog):
     fermo = threading.Event()
     telegram = TelegramACicli(fermo, [[comando("/sondaggio mar")]])
     with caplog.at_level(logging.INFO, logger="prossima"):
-        principale.avvia({**ambiente(tmp_path), "PV_DOMANDA": "Quando si gioca?"}, telegram=telegram, fermo=fermo)
+        principale.avvia(
+            {**ambiente(tmp_path), "PV_DOMANDA": "Quando si gioca?"}, telegram=telegram, fermo=fermo
+        )
     assert [s["domanda"] for s in telegram.di_tipo("manda_sondaggio")] == ["Quando si gioca?"]
     assert "domanda «Quando si gioca?»" in caplog.text
 
@@ -361,7 +375,9 @@ class TelegramConVoti(TelegramACicli):
     def aggiornamenti(self, offset, attesa):
         if len(self.chiamate_aggiornamenti()) == 1:
             poll_id = self.ultimo_sondaggio["poll_id"]
-            self._lotti.insert(0, [risposta(poll_id, p.telegram_id, 0) for p in (GIO, ABE, EMI, SEM)])
+            self._lotti.insert(
+                0, [risposta(poll_id, p.telegram_id, 0) for p in (GIO, ABE, EMI, SEM)]
+            )
         return super().aggiornamenti(offset, attesa)
 
     def chiamate_aggiornamenti(self):
@@ -376,3 +392,28 @@ def test_avvia_usa_pv_giorni_e_in_esercizio_gli_annunci_aspettano(tmp_path):
     assert [o.split()[0] for o in sondaggio["opzioni"][:-1]] == ["mar", "gio"]
     # i quattro voti fanno un «quasi», ma l'ultimo voto è di adesso: aspetta
     assert telegram.di_tipo("scrivi") == []
+
+
+def test_mentre_il_rispondente_lavora_il_long_polling_dura_2_secondi(store, tmp_path):
+    fermo = FermoFinto()
+    telegram = TelegramACicli(fermo, [[], [], []])
+    bot = BotFinto(store, occupato=[False, True, False])
+    principale.ciclo(telegram, bot, store, tmp_path / "battito", fermo, pausa_errore=0)
+    assert [a["attesa"] for a in telegram.di_tipo("aggiornamenti")] == [25, 2, 25, 25]
+
+
+@pytest.mark.parametrize(
+    "url, riga",
+    [
+        ("", "risposte spente: PV_OLLAMA_URL non c'è"),
+        ("http://ollama:11434", "risposte con Ollama: tipo da llama3:latest, testo da gemma3:12b"),
+    ],
+)
+def test_all_avvio_dice_se_le_risposte_sono_accese(tmp_path, caplog, url, riga):
+    fermo = threading.Event()
+    fermo.set()
+    with caplog.at_level(logging.INFO):
+        principale.avvia(
+            {**ambiente(tmp_path), "PV_OLLAMA_URL": url}, telegram=TelegramFinto(), fermo=fermo
+        )
+    assert riga in caplog.text

@@ -24,6 +24,7 @@ def test_il_finto_ha_i_metodi_del_client_vero_con_gli_stessi_argomenti():
         "aggiornamenti",
         "manda_sondaggio",
         "scrivi",
+        "azione",
         "rispondi_al_tocco",
         "togli_bottoni",
         "ferma_sondaggio",

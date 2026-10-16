@@ -78,3 +78,35 @@ def fino_al(bot, orologio, giorno: int) -> None:
     while orologio.adesso.day < giorno:
         orologio.avanza(hours=12)
         bot.ricevi([])
+
+
+def scritto(
+    testo: str,
+    da: int = GIO.telegram_id,
+    chat: int = GRUPPO,
+    citato: dict | None = None,
+    nome: str = "x",
+) -> dict:
+    """Un messaggio che non è un comando: nel gruppo arriva solo se risponde a
+    un messaggio del bot (`citato`, v. `del_bot`)."""
+    aggiornamento = comando(testo, da, chat)
+    messaggio = aggiornamento["message"]
+    messaggio["from"]["first_name"] = nome
+    if citato is not None:
+        messaggio["reply_to_message"] = citato
+    return aggiornamento
+
+
+def del_bot(message_id: int, testo: str | None = None, domanda: str | None = None) -> dict:
+    """Un messaggio del bot, come compare in `reply_to_message`: un testo o un sondaggio."""
+    messaggio = {
+        "message_id": message_id,
+        "from": {"id": 42, "is_bot": True, "first_name": "Prossima volta", "username": NOME},
+        "chat": {"id": GRUPPO, "type": "supergroup"},
+        "date": 1760000000,
+    }
+    if testo is not None:
+        messaggio["text"] = testo
+    if domanda is not None:
+        messaggio["poll"] = {"id": "p", "question": domanda, "options": []}
+    return messaggio

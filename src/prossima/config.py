@@ -7,7 +7,9 @@ identificativi finti. Un valore mancante o sbagliato ferma l'avvio con un
 messaggio che dice quale: mai un default silenzioso per un segreto, per il
 gruppo o per una persona. Le frasi, la domanda e i giorni di sempre del
 sondaggio hanno un default: senza `PV_FRASI`, quelle di `testi.FRASI_NESSUNA`;
-senza `PV_DOMANDA`, `testi.DOMANDA`; senza `PV_GIORNI`, `regole.GIORNI_DI_SEMPRE`.
+senza `PV_DOMANDA`, `testi.DOMANDA`; senza `PV_GIORNI`, `regole.GIORNI_DI_SEMPRE`. Senza `PV_OLLAMA_URL` il bot non
+risponde a chi gli scrive; i modelli (`PV_OLLAMA_TIPO`, `PV_OLLAMA_TESTO`) hanno
+quelli di `risposte.MODELLI`.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .regole import GIORNI_DI_SEMPRE, MASTER, RUOLI, Persona, Roster, giorno_della_parola
+from .risposte import MODELLI, Modelli
 from .testi import DOMANDA, FRASI_NESSUNA, LUNGHEZZA_DOMANDA, LUNGHEZZA_OPZIONE, utf16
 
 FUSO_PREDEFINITO = "Europe/Zurich"
@@ -43,6 +46,9 @@ class Impostazioni:
     frasi: tuple[str, ...]
     domanda: str
     giorni: tuple[int, ...]
+    # Le risposte (spec 2026-10-17): senza l'URL di Ollama sono spente.
+    ollama_url: str | None = None
+    modelli: Modelli = MODELLI
 
 
 def _testo(env: Mapping[str, str], nome: str) -> str:
@@ -65,7 +71,9 @@ def _fuso(env: Mapping[str, str]) -> ZoneInfo:
     try:
         return ZoneInfo(nome)
     except (ZoneInfoNotFoundError, ValueError, OSError):
-        raise ConfigurazioneErrata("PV_FUSO: fuso orario sconosciuto (per esempio Europe/Zurich)") from None
+        raise ConfigurazioneErrata(
+            "PV_FUSO: fuso orario sconosciuto (per esempio Europe/Zurich)"
+        ) from None
 
 
 def _persona(voce: object, dove: str) -> Persona:
@@ -75,7 +83,11 @@ def _persona(voce: object, dove: str) -> Persona:
     if sconosciute:
         raise ConfigurazioneErrata(f"{dove}: chiavi sconosciute: {', '.join(sorted(sconosciute))}")
     soprannome = voce.get("soprannome")
-    if not isinstance(soprannome, str) or not soprannome.strip() or soprannome != soprannome.strip():
+    if (
+        not isinstance(soprannome, str)
+        or not soprannome.strip()
+        or soprannome != soprannome.strip()
+    ):
         raise ConfigurazioneErrata(f"{dove}: soprannome manca, o ha spazi intorno")
     dove = f"{dove} ({soprannome})"
     telegram_id = voce.get("telegram_id")
@@ -99,7 +111,9 @@ def roster_da_toml(testo: str, origine: str = "roster") -> Roster:
         raise ConfigurazioneErrata(f"{origine}: non è TOML valido ({e})") from None
     sconosciute = set(dati) - {"persona"}
     if sconosciute:
-        raise ConfigurazioneErrata(f"{origine}: sezioni sconosciute: {', '.join(sorted(sconosciute))}")
+        raise ConfigurazioneErrata(
+            f"{origine}: sezioni sconosciute: {', '.join(sorted(sconosciute))}"
+        )
     voci = dati.get("persona")
     if not isinstance(voci, list) or not voci:
         raise ConfigurazioneErrata(f"{origine}: nessuna persona: servono le sezioni [[persona]]")
@@ -229,4 +243,9 @@ def da_ambiente(env: Mapping[str, str]) -> Impostazioni:
         frasi=frasi_da_ambiente(env),
         domanda=_domanda(env),
         giorni=_giorni(env),
+        ollama_url=(env.get("PV_OLLAMA_URL") or "").strip() or None,
+        modelli=Modelli(
+            tipo=(env.get("PV_OLLAMA_TIPO") or "").strip() or MODELLI.tipo,
+            testo=(env.get("PV_OLLAMA_TESTO") or "").strip() or MODELLI.testo,
+        ),
     )

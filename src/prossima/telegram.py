@@ -165,6 +165,11 @@ class BotTelegram:
             }
         return self._chiama("sendMessage", corpo, timeout=SCRITTURA)
 
+    def azione(self, chat_id: int, azione: str = "typing") -> None:
+        """«sta scrivendo…» nella chat: Telegram lo mostra per 5 secondi, o
+        finché il bot non scrive."""
+        self._chiama("sendChatAction", {"chat_id": chat_id, "action": azione})
+
     def rispondi_al_tocco(self, tocco_id: str, avviso: str | None = None) -> None:
         """La risposta a un tocco su un bottone: senza `avviso` non si vede niente;
         con, un avviso solo per chi ha toccato."""

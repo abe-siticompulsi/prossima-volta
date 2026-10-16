@@ -49,9 +49,15 @@ def test_chiude_e_falso_se_manca():
         (roster(p(ruolo="admin")), "ruolo 'admin' sconosciuto"),
         (roster(p(chiude='"sì"')), "chiude deve essere true o false"),
         (roster(p(), p(telegram_id=2, ruolo="giocatore")), "il soprannome 'gio' compare due volte"),
-        (roster(p(), p(soprannome="abe", ruolo="giocatore")), "il telegram_id 100000001 compare due volte"),
+        (
+            roster(p(), p(soprannome="abe", ruolo="giocatore")),
+            "il telegram_id 100000001 compare due volte",
+        ),
         (roster(p(ruolo="giocatore")), "serve esattamente un master, ce ne sono 0"),
-        (roster(p(), p(soprannome="abe", telegram_id=2)), "serve esattamente un master, ce ne sono 2"),
+        (
+            roster(p(), p(soprannome="abe", telegram_id=2)),
+            "serve esattamente un master, ce ne sono 2",
+        ),
         (roster(p(chiude="false")), "nessuno può chiudere il sondaggio"),
     ],
 )
@@ -111,7 +117,10 @@ def test_una_variabile_che_manca(tmp_path, nome):
 
 @pytest.mark.parametrize(
     ("nome", "atteso"),
-    [("PV_GRUPPO", "PV_GRUPPO deve essere un numero intero"), ("PV_FUSO", "PV_FUSO: fuso orario sconosciuto")],
+    [
+        ("PV_GRUPPO", "PV_GRUPPO deve essere un numero intero"),
+        ("PV_FUSO", "PV_FUSO: fuso orario sconosciuto"),
+    ],
 )
 def test_valori_malformati_senza_eco_del_valore(tmp_path, nome, atteso):
     """Un valore sbagliato non si ripete nel messaggio: se due variabili sono
@@ -128,7 +137,11 @@ def test_pv_fuso_cartella_tzdata(tmp_path):
 
 def test_roster_non_utf8(tmp_path):
     file_latin1 = tmp_path / "roster.toml"
-    file_latin1.write_bytes("[[persona]]\nsoprannome = \"gio\"\ntelegram_id = 1\nruolo = \"master\"\nchiude = true\n# «è»\n".encode("latin-1"))
+    file_latin1.write_bytes(
+        '[[persona]]\nsoprannome = "gio"\ntelegram_id = 1\nruolo = "master"\nchiude = true\n# «è»\n'.encode(
+            "latin-1"
+        )
+    )
     with pytest.raises(ConfigurazioneErrata, match="non è UTF-8"):
         config.leggi_roster(file_latin1)
 
@@ -192,10 +205,16 @@ def test_le_frasi_d_esempio_sono_quelle_predefinite():
     ("testo", "messaggio"),
     [
         ("# solo commenti\n\n", r"frasi\.txt: nessuna frase"),
-        ("Nessuna: uno\n" + "x" * 101 + "\n", r"frasi\.txt, riga 2: la frase è lunga 101 caratteri, il massimo è 100"),
+        (
+            "Nessuna: uno\n" + "x" * 101 + "\n",
+            r"frasi\.txt, riga 2: la frase è lunga 101 caratteri, il massimo è 100",
+        ),
         # 100 caratteri per Python, 101 per Telegram, che conta in UTF-16
         ("x" * 99 + "🎲\n", r"riga 1: la frase è lunga 101 caratteri"),
-        ("Nessuna: uno\n# c\nNessuna: uno\n", r"frasi\.txt, riga 3: la stessa frase è già alla riga 1"),
+        (
+            "Nessuna: uno\n# c\nNessuna: uno\n",
+            r"frasi\.txt, riga 3: la stessa frase è già alla riga 1",
+        ),
         # la riga è quella che mostra l'editor: contano solo gli a capo
         ("Nessuna: a\x85b\n" + "x" * 101 + "\n", r"frasi\.txt, riga 2: la frase è lunga 101"),
     ],
@@ -257,7 +276,9 @@ def test_una_domanda_oltre_300_caratteri(tmp_path):
     come le opzioni: 299 lettere e un'emoji fanno 301. Il messaggio non ripete
     il valore, come per le altre variabili."""
     config.da_ambiente(ambiente(tmp_path, PV_DOMANDA="x" * 298 + "🎲"))
-    with pytest.raises(ConfigurazioneErrata, match="PV_DOMANDA: la domanda è lunga 301 caratteri, il massimo è 300") as errore:
+    with pytest.raises(
+        ConfigurazioneErrata, match="PV_DOMANDA: la domanda è lunga 301 caratteri, il massimo è 300"
+    ) as errore:
         config.da_ambiente(ambiente(tmp_path, PV_DOMANDA="x" * 299 + "🎲"))
     assert "xxx" not in str(errore.value)
 
@@ -268,10 +289,33 @@ def test_senza_pv_giorni_tutti_tranne_il_sabato(tmp_path):
 
 
 def test_i_giorni_da_pv_giorni(tmp_path):
-    assert config.da_ambiente(ambiente(tmp_path, PV_GIORNI="ven lun  mercoledì lun")).giorni == (0, 2, 4)
+    assert config.da_ambiente(ambiente(tmp_path, PV_GIORNI="ven lun  mercoledì lun")).giorni == (
+        0,
+        2,
+        4,
+    )
 
 
 def test_un_giorno_sconosciuto_in_pv_giorni(tmp_path):
     with pytest.raises(ConfigurazioneErrata, match="PV_GIORNI: i giorni si scrivono") as errore:
         config.da_ambiente(ambiente(tmp_path, PV_GIORNI="lun SEGRETO"))
     assert "SEGRETO" not in str(errore.value)
+
+
+def test_senza_pv_ollama_url_le_risposte_sono_spente(tmp_path):
+    imp = config.da_ambiente(ambiente(tmp_path, PV_OLLAMA_URL="  "))
+    assert imp.ollama_url is None
+    assert (imp.modelli.tipo, imp.modelli.testo) == ("llama3:latest", "gemma3:12b")
+
+
+def test_ollama_e_i_suoi_modelli(tmp_path):
+    imp = config.da_ambiente(
+        ambiente(
+            tmp_path,
+            PV_OLLAMA_URL=" http://ollama:11434 ",
+            PV_OLLAMA_TIPO="llama3.1:8b",
+            PV_OLLAMA_TESTO="qwen2.5:14b",
+        )
+    )
+    assert imp.ollama_url == "http://ollama:11434"
+    assert (imp.modelli.tipo, imp.modelli.testo) == ("llama3.1:8b", "qwen2.5:14b")

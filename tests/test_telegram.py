@@ -202,6 +202,13 @@ def test_registra_comandi_per_le_chat_private():
     }
 
 
+def test_sta_scrivendo():
+    viste, gestore = registra(True)
+    bot_con(gestore).azione(-100)
+    assert viste[0].url.path.endswith("/sendChatAction")
+    assert corpo(viste[0]) == {"chat_id": -100, "action": "typing"}
+
+
 def test_un_429_dice_quanto_aspettare():
     bot = bot_con(
         lambda r: rifiuto(429, "Too Many Requests: retry after 7", parameters={"retry_after": 7})

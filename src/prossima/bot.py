@@ -8,7 +8,10 @@ le sue strutture in memoria, che si toccano solo attraverso i loro metodi:
 - `chiusura.py`: `/chiudi`, la chiusura in sospeso e il suo completamento;
 - `ripresa.py`: la ripresa dopo il buio (§3.8);
 - `invio.py`: ogni chiamata che scrive su Telegram, la pausa dopo un 429, la
-  posta in uscita, il sondaggio nuovo.
+  posta in uscita, il sondaggio nuovo;
+- `rispondente.py`: il thread che scrive con Ollama le risposte a chi scrive
+  al bot (spec 2026-10-17); il bot gli passa la foto dei fatti, e a ogni giro
+  prende le risposte pronte.
 Le dipendenze vanno in un senso solo: bot → chiusura → ripresa → invio (e il
 bot usa anche la ripresa e l'invio).
 
@@ -25,7 +28,8 @@ Che cosa parte verso Telegram, e quando:
   in sospeso non ce ne sono. Uno rifiutato (4xx) va nel log come errore, non
   ferma gli altri, e non si riprova fino al prossimo avvio;
 - ogni altro messaggio passa dalla posta in uscita del database, in ordine
-  (v. `invio.py`).
+  (v. `invio.py`), anche le risposte del rispondente; mentre il rispondente
+  lavora, «sta scrivendo…» nella chat, al meglio.
 Dopo un 429 niente parte prima di `retry_after`; nel frattempo `manda` non
 prova nemmeno.
 """
@@ -42,6 +46,8 @@ from .chiusura import Chiusure, argomenti_di_chiudi
 from .invio import Invio, forse_arrivata, livello
 from .regole import Roster
 from .ripresa import Ripresa
+from .rispondente import Rispondente
+from .risposte import Domanda, Fatti, fatti_del_sondaggio, risposta_del_codice
 from .store import Sondaggio, Store
 from .telegram import MASSIMO_AGGIORNAMENTI, TelegramError, TelegramRifiuto
 
@@ -59,6 +65,8 @@ ATTESA_ANNUNCI = timedelta(minutes=2)
 # Un voto per un sondaggio sconosciuto si dice nel gruppo solo se un sondaggio
 # non confermato da Telegram è di questi ultimi giorni.
 NON_CONFERMATO_DI_RECENTE = timedelta(days=7)
+# Telegram mostra «sta scrivendo…» per 5 secondi: si rinnova prima.
+STA_SCRIVENDO = timedelta(seconds=4)
 
 
 class Bot:
@@ -77,6 +85,7 @@ class Bot:
         domanda: str = testi.DOMANDA,
         giorni: Sequence[int] = regole.GIORNI_DI_SEMPRE,
         attesa_annunci: timedelta = ATTESA_ANNUNCI,
+        rispondente: Rispondente | None = None,
     ) -> None:
         self._store = store
         self._roster = roster
@@ -115,6 +124,10 @@ class Bot:
         # La prima lettura dopo il buio, se il suo lotto era pieno: la ripresa
         # aspetta di aver gestito gli arretrati, ma il buio è finito lì.
         self._fine_del_buio: datetime | None = None
+        # Senza rispondente (senza Ollama) il bot non risponde a chi gli scrive.
+        self._rispondente = rispondente
+        # Per chat, l'ultimo «sta scrivendo…»: in memoria, è solo un segno.
+        self._scrivendo: dict[int, datetime] = {}
 
     # --- il giro
 
@@ -172,11 +185,13 @@ class Bot:
         if self._invio.in_pausa():
             return
         try:
+            self._risposte_pronte()
             self._invio.manda_posta()
             if self._chiusure.riprova():
                 self._invio.manda_posta()
             self._togli_bottoni_superati()
             self._manda_annunci()
+            self._sta_scrivendo()
         except TelegramError as e:
             self._invio.avvisa("invio rimandato al giro seguente: %s", e)
 
@@ -188,6 +203,11 @@ class Bot:
             return
         parole = (messaggio.get("text") or "").split()
         if not parole:
+            return
+        if not parole[0].startswith("/"):
+            del_bot = self._del_bot(messaggio.get("reply_to_message"))
+            if del_bot is not None:
+                self._domanda(messaggio, del_bot, citata=True)
             return
         comando = self._comando(parole[0])
         if comando == "sondaggio":
@@ -201,15 +221,115 @@ class Bot:
             )
 
     def _in_privato(self, messaggio: dict) -> None:
-        """Fuori dal gruppo del party il bot risponde solo ad /aiuto, in una chat
-        privata e a chi è nel roster: le istruzioni senza scrivere nel gruppo
-        (Alberto, 15/10). Tutto il resto si ignora."""
+        """Fuori dal gruppo del party il bot risponde solo in una chat privata e a
+        chi è nel roster: ad /aiuto, le istruzioni senza scrivere nel gruppo
+        (Alberto, 15/10), e a un messaggio che non è un comando, come a chi
+        risponde al bot nel gruppo (spec 2026-10-17). Tutto il resto si ignora."""
         chat = messaggio.get("chat", {})
-        if chat.get("type") != "private" or self._roster.per_id(messaggio.get("from", {}).get("id")) is None:
+        if (
+            chat.get("type") != "private"
+            or self._roster.per_id(messaggio.get("from", {}).get("id")) is None
+        ):
             return
         parole = (messaggio.get("text") or "").split()
-        if parole and self._comando(parole[0]) == "aiuto":
-            self._invio.accoda(testi.aiuto(self._nome, self._roster, self._giorni), chat_id=chat["id"])
+        if parole and not parole[0].startswith("/"):
+            self._domanda(messaggio, "", citata=False)
+        elif parole and self._comando(parole[0]) == "aiuto":
+            self._invio.accoda(
+                testi.aiuto(self._nome, self._roster, self._giorni), chat_id=chat["id"]
+            )
+
+    # --- le risposte (spec 2026-10-17)
+
+    def _del_bot(self, citato: dict | None) -> str | None:
+        """Il testo del messaggio del bot a cui risponde un messaggio del gruppo
+        (per il sondaggio, la domanda), o None se non risponde al bot."""
+        if not citato:
+            return None
+        autore = citato.get("from") or {}
+        if not autore.get("is_bot") or (autore.get("username") or "").lower() != self._nome.lower():
+            return None
+        return citato.get("text") or (citato.get("poll") or {}).get("question") or ""
+
+    def _domanda(self, messaggio: dict, del_bot: str, *, citata: bool) -> None:
+        """Un messaggio a cui rispondere: al rispondente, con la foto dei fatti.
+        Con il sondaggio forse già fermo (una chiusura in sospeso, una ripresa)
+        i fatti non sono sicuri, e con la fila piena non c'è posto: la frase
+        fissa, subito."""
+        if self._rispondente is None:
+            return
+        chat = messaggio["chat"]["id"]
+        risposta_a = messaggio["message_id"] if citata else None
+        autore = messaggio.get("from") or {}
+        persona = self._roster.per_id(autore.get("id"))
+        chi = testi.nome(persona) if persona else (autore.get("first_name") or "").strip()
+        aperto = self._store.sondaggio_aperto()
+        incerto = self._store.ripresa() is not None or (
+            aperto is not None and self._in_chiusura(aperto)
+        )
+        domanda = Domanda(
+            chat, messaggio["message_id"], chi, messaggio["text"], del_bot, self._fatti(), citata
+        )
+        if incerto or not self._rispondente.accetta(domanda):
+            log.info(
+                "risposta con la frase fissa: %s", "fatti incerti" if incerto else "fila piena"
+            )
+            self._invio.accoda(testi.non_riesco(), risposta_a=risposta_a, chat_id=chat)
+
+    def _fatti(self) -> Fatti:
+        ultimo = self._store.ultimo_sondaggio()
+        voti = {} if ultimo is None else self._store.voti(ultimo.id)
+        return fatti_del_sondaggio(ultimo, voti, self._roster, self._oggi())
+
+    def _risposte_pronte(self) -> None:
+        """Le risposte del rispondente, nella posta. Se i fatti sono cambiati
+        mentre il modello scriveva, quella del codice con i fatti di adesso."""
+        if self._rispondente is None:
+            return
+        for domanda, esito in self._rispondente.pronte():
+            testo = esito.testo
+            if esito.dai_fatti and esito.tipo is not None:
+                adesso = self._fatti()
+                if adesso != domanda.fatti:
+                    log.info("i fatti sono cambiati: la risposta è quella del codice")
+                    testo = (
+                        risposta_del_codice(
+                            esito.tipo,
+                            esito.giorno,
+                            domanda.testo,
+                            domanda.chi,
+                            adesso,
+                            self._roster,
+                        )
+                        or testo
+                    )
+            self._invio.accoda(
+                testo,
+                risposta_a=domanda.messaggio_id if domanda.citata else None,
+                chat_id=domanda.chat_id,
+            )
+
+    def _sta_scrivendo(self) -> None:
+        """«sta scrivendo…» nelle chat delle domande in lavoro, rinnovato ogni
+        `STA_SCRIVENDO`."""
+        chat = {d.chat_id for d in self.in_lavoro()}
+        self._scrivendo = {c: alle for c, alle in self._scrivendo.items() if c in chat}
+        adesso = self._adesso()
+        for c in sorted(chat):
+            ultimo = self._scrivendo.get(c)
+            if ultimo is None or adesso - ultimo >= STA_SCRIVENDO:
+                self._invio.sta_scrivendo(c)
+                self._scrivendo[c] = adesso
+
+    def in_lavoro(self) -> tuple[Domanda, ...]:
+        return () if self._rispondente is None else self._rispondente.in_lavoro()
+
+    def occupato(self) -> bool:
+        """Il rispondente lavora: il ciclo legge Telegram più spesso, per
+        mandare la risposta appena è pronta."""
+        return bool(self.in_lavoro())
+
+    # --- i tocchi
 
     def _tocco(self, tocco: dict) -> None:
         """Un tocco su un bottone di «impossibile» (§3.10): per chi può chiudere,
@@ -323,7 +443,11 @@ class Bot:
             voto = regole.voto_da_opzioni(fermo.date, opzioni)
             self._store.registra_voto(fermo.id, utente["id"], poll_id, voto, self._adesso())
             self._voto_registrato(utente["id"])
-        elif sondaggio is not None and sondaggio.poll_prima is not None and poll_id == sondaggio.poll_prima:
+        elif (
+            sondaggio is not None
+            and sondaggio.poll_prima is not None
+            and poll_id == sondaggio.poll_prima
+        ):
             # Dato nel sondaggio di prima della ripresa, poco prima dello stop, e
             # arrivato dopo la riapertura: vale se la persona non ha votato nel
             # sondaggio di adesso. Le opzioni sono quelle di prima.

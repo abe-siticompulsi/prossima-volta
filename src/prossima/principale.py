@@ -17,14 +17,18 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import config, regole, sblocco
+from . import config, regole, risposte, sblocco
 from .bot import COMANDI, COMANDI_IN_PRIVATO, Bot
+from .ollama import Ollama
+from .rispondente import Rispondente
 from .store import Store
 from .telegram import BotTelegram, TelegramError, TelegramTroppeRichieste
 
 log = logging.getLogger(__name__)
 
 ATTESA = 25  # secondi di long polling
+# Mentre il rispondente lavora: la risposta parte al massimo 2 secondi dopo che è pronta.
+ATTESA_BREVE = 2
 BATTITO_MASSIMO = 120  # secondi: oltre, il container è malato
 # Dopo errori di fila la pausa raddoppia a ogni errore, fino a qui: con una
 # lettura che scade (35 secondi) il battito resta sotto il massimo.
@@ -54,7 +58,8 @@ def ciclo(
 ) -> None:
     """Legge il bot in long polling finché `fermo` non è impostato, e tocca il
     battito a ogni giro. Non si ferma per un errore: lo registra, aspetta e
-    riprova. La pausa è `pausa_errore`, e raddoppia a ogni errore di fila fino a
+    riprova. Mentre il bot è occupato (il rispondente lavora) il long polling
+    dura `ATTESA_BREVE`, per mandare presto la risposta. La pausa è `pausa_errore`, e raddoppia a ogni errore di fila fino a
     `PAUSA_MASSIMA`; torna normale al primo giro riuscito. Dopo un 429 si aspetta
     almeno quanto chiede Telegram. Il battito dice che il ciclo gira, non che
     Telegram risponde: si tocca anche dopo un errore e durante l'attesa.
@@ -69,7 +74,10 @@ def ciclo(
     while not fermo.is_set():
         pausa = 0.0
         try:
-            aggiornamenti = telegram.aggiornamenti(store.offset(), attesa)
+            breve = bot.occupato()
+            aggiornamenti = telegram.aggiornamenti(
+                store.offset(), min(attesa, ATTESA_BREVE) if breve else attesa
+            )
             letture_fallite, segnalato = 0, False
             bot.ricevi(aggiornamenti)
             pausa_corrente = pausa_errore
@@ -146,6 +154,7 @@ def avvia(env: Mapping[str, str], *, telegram=None, fermo: threading.Event | Non
         frasi=imp.frasi,
         domanda=imp.domanda,
         giorni=imp.giorni,
+        rispondente=_rispondente(imp),
     )
     log.info(
         "Prossima volta: @%s nel gruppo %s, %d persone nel roster, frasi di «Nessuna»: %d, "
@@ -157,7 +166,23 @@ def avvia(env: Mapping[str, str], *, telegram=None, fermo: threading.Event | Non
         imp.domanda,
         " ".join(regole.GIORNI[g] for g in imp.giorni),
     )
+    if imp.ollama_url:
+        log.info(
+            "risposte con Ollama: tipo da %s, testo da %s", imp.modelli.tipo, imp.modelli.testo
+        )
+    else:
+        log.info("risposte spente: PV_OLLAMA_URL non c'è")
     ciclo(telegram, bot, store, imp.battito, fermo or threading.Event())
+
+
+def _rispondente(imp: config.Impostazioni) -> Rispondente | None:
+    """Il thread delle risposte, se c'è Ollama."""
+    if not imp.ollama_url:
+        return None
+    ollama = Ollama(imp.ollama_url)
+    return Rispondente(
+        lambda domanda: risposte.scrivi(domanda, ollama.chiedi, imp.roster, imp.modelli)
+    )
 
 
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
@@ -193,8 +218,6 @@ def _sblocca(env: Mapping[str, str]) -> int:
         log.error("il database %s non c'è", percorso)
         return 2
     fatto = sblocco.sblocca(Store(percorso), datetime.now(UTC))
-    for riga in fatto or [
-        "niente da sbloccare: nessuna chiusura in sospeso, nessuna ripresa"
-    ]:
+    for riga in fatto or ["niente da sbloccare: nessuna chiusura in sospeso, nessuna ripresa"]:
         log.info("sblocca: %s", riga)
     return 0
