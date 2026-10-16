@@ -439,3 +439,51 @@ def test_offset_e_ultima_lettura(store):
 def test_un_momento_senza_fuso_e_rifiutato(store):
     with pytest.raises(ValueError, match="senza fuso"):
         store.segna_lettura(datetime(2025, 10, 12, 21, 5))
+
+
+# --- la data scelta (risposte, spec 2026-10-17 §7)
+
+
+def test_la_data_scelta_si_salva_con_la_chiusura(store):
+    s = apri(store)
+    assert store.chiudi_sondaggio(s.id, ALLE, 777, scelta=d("16/10"))
+    assert store.sondaggio(s.id).scelta == d("16/10")
+
+
+def test_senza_data_scelta_resta_vuota(store):
+    s = apri(store)
+    store.chiudi_sondaggio(s.id, ALLE, 777)
+    assert store.sondaggio(s.id).scelta is None
+
+
+def test_un_database_vecchio_prende_la_colonna_della_data_scelta(tmp_path):
+    percorso = tmp_path / "vecchio.sqlite"
+    with sqlite3.connect(percorso) as c:
+        c.execute(
+            "CREATE TABLE sondaggi (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, "
+            "poll_id TEXT NOT NULL, messaggio INTEGER NOT NULL, frase TEXT NOT NULL, "
+            "fatti TEXT NOT NULL DEFAULT '{}', aperto_alle TEXT NOT NULL, chiuso_alle TEXT, "
+            "chiuso_da INTEGER, date_iniziali TEXT NOT NULL, poll_prima TEXT, date_prima TEXT)"
+        )
+        c.execute(
+            "INSERT INTO sondaggi (date, poll_id, messaggio, frase, aperto_alle, chiuso_alle, "
+            "date_iniziali) VALUES ('[\"2025-10-14\"]', 'p', 1, 'N', ?, ?, '[\"2025-10-14\"]')",
+            (ALLE.isoformat(), ALLE.isoformat()),
+        )
+    s = Store(percorso)
+    s.crea_schema()
+    s.crea_schema()
+    vecchio = s.ultimo_sondaggio()
+    assert vecchio.chiuso_alle == ALLE and vecchio.scelta is None
+
+
+def test_l_ultimo_sondaggio_e_l_aperto_o_l_ultimo_chiuso(store):
+    assert store.ultimo_sondaggio() is None
+    primo = apri(store)
+    assert store.ultimo_sondaggio() == primo
+    store.chiudi_sondaggio(primo.id, ALLE, 777, scelta=d("14/10"))
+    assert store.ultimo_sondaggio().id == primo.id
+    secondo = apri(store, poll_id="poll-2", messaggio=502)
+    assert store.ultimo_sondaggio() == secondo
+    store.chiudi_sondaggio(secondo.id, ALLE, 778)
+    assert store.ultimo_sondaggio().id == secondo.id

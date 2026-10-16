@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS sondaggi (
     chiuso_da INTEGER,
     date_iniziali TEXT NOT NULL,
     poll_prima TEXT,
-    date_prima TEXT
+    date_prima TEXT,
+    scelta TEXT
 );
 -- Un sondaggio aperto alla volta: la regola la tiene anche il database.
 CREATE UNIQUE INDEX IF NOT EXISTS un_solo_aperto
@@ -93,6 +94,9 @@ class Sondaggio:
     # voto dato lì poco prima dello stop arriva dopo la riapertura.
     poll_prima: str | None = None
     date_prima: tuple[date, ...] = ()
+    # La data tenuta da `/chiudi <data>`: vuota per un sondaggio aperto, per
+    # `/chiudi` senza data, per `rimanda` e per i chiusi prima della colonna.
+    scelta: date | None = None
 
 
 @dataclass(frozen=True)
@@ -176,6 +180,7 @@ def _sondaggio(riga: sqlite3.Row) -> Sondaggio:
         date_iniziali=_giorni(riga["date_iniziali"]),
         poll_prima=riga["poll_prima"],
         date_prima=() if riga["date_prima"] is None else _giorni(riga["date_prima"]),
+        scelta=None if riga["scelta"] is None else date.fromisoformat(riga["scelta"]),
     )
 
 
@@ -229,7 +234,13 @@ def _apri(
     return nuovo
 
 
-def _chiudi(c: sqlite3.Connection, sondaggio_id: int, alle: datetime, comando: int | None) -> bool:
+def _chiudi(
+    c: sqlite3.Connection,
+    sondaggio_id: int,
+    alle: datetime,
+    comando: int | None,
+    scelta: date | None = None,
+) -> bool:
     """Chiude il sondaggio, e con lui la sua chiusura in sospeso e la sua
     ripresa, se ci sono: un sondaggio chiuso non ha niente da chiudere né da
     riprendere. Il sondaggio fermato da una ripresa, che aspetta di essere
@@ -237,9 +248,9 @@ def _chiudi(c: sqlite3.Connection, sondaggio_id: int, alle: datetime, comando: i
     ripresa = _leggi_ripresa(c)
     in_riapertura = ripresa is not None and ripresa.fase == RIAPRIRE and ripresa.sondaggio == sondaggio_id
     cursore = c.execute(
-        "UPDATE sondaggi SET chiuso_alle = ?, chiuso_da = ? "
+        "UPDATE sondaggi SET chiuso_alle = ?, chiuso_da = ?, scelta = ? "
         "WHERE id = ? AND (chiuso_alle IS NULL OR (? AND chiuso_da IS NULL))",
-        (_iso(alle), comando, sondaggio_id, in_riapertura),
+        (_iso(alle), comando, scelta and scelta.isoformat(), sondaggio_id, in_riapertura),
     )
     if cursore.rowcount != 1:
         return False
@@ -346,12 +357,24 @@ class Store:
         with self._connessione() as c:
             c.execute("PRAGMA journal_mode = WAL")
             c.executescript(SCHEMA)
+            # Un database di prima delle risposte (2026-10-17) non ha la data scelta
+            colonne = {r["name"] for r in c.execute("PRAGMA table_info(sondaggi)")}
+            if "scelta" not in colonne:
+                c.execute("ALTER TABLE sondaggi ADD COLUMN scelta TEXT")
 
     # --- sondaggi
 
     def sondaggio_aperto(self) -> Sondaggio | None:
         with self._connessione() as c:
             riga = c.execute("SELECT * FROM sondaggi WHERE chiuso_alle IS NULL").fetchone()
+        return None if riga is None else _sondaggio(riga)
+
+    def ultimo_sondaggio(self) -> Sondaggio | None:
+        """L'aperto, o se non c'è l'ultimo chiuso: quello di cui parlano le risposte."""
+        with self._connessione() as c:
+            riga = c.execute(
+                "SELECT * FROM sondaggi ORDER BY chiuso_alle IS NULL DESC, id DESC LIMIT 1"
+            ).fetchone()
         return None if riga is None else _sondaggio(riga)
 
     def sondaggio(self, sondaggio_id: int) -> Sondaggio | None:
@@ -374,6 +397,7 @@ class Store:
         comando: int | None = None,
         lettere: Sequence[LetteraNuova] = (),
         non_confermato: Sequence[str] | None = None,
+        scelta: date | None = None,
     ) -> bool:
         """Vero se l'ha chiuso questa chiamata. `comando` è il messaggio del
         `/chiudi` che lo chiude: lo stesso comando letto due volte non chiude il
@@ -381,9 +405,9 @@ class Store:
         nella stessa transazione, e solo se questa chiamata l'ha chiuso; con
         `non_confermato` (gli argomenti del comando che lo rilancia), anche il
         sondaggio nuovo di `rimanda` che Telegram non ha confermato si ricorda
-        lì (v. `segna_non_confermato`)."""
+        lì (v. `segna_non_confermato`). `scelta` è la data tenuta, se c'è."""
         with self._connessione() as c:
-            chiuso = _chiudi(c, sondaggio_id, alle, comando)
+            chiuso = _chiudi(c, sondaggio_id, alle, comando, scelta)
             if chiuso:
                 _accoda(c, lettere, alle)
                 if non_confermato is not None:

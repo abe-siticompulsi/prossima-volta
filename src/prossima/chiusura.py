@@ -237,8 +237,13 @@ class Chiusure:
                 if possibili or not tutte
                 else testi.chiuso_con_le_date_possibili_passate()
             )
+        scelta = None if chiusura.argomento is None else date.fromisoformat(chiusura.argomento)
         self._store.chiudi_sondaggio(
-            sondaggio.id, self._adesso(), chiusura.comando, self._invio.lettere(lettere)
+            sondaggio.id,
+            self._adesso(),
+            chiusura.comando,
+            self._invio.lettere(lettere),
+            scelta=scelta,
         )
 
     def _rimanda(self, vecchio: Sondaggio, comando: int, fermato: Fermato) -> None:

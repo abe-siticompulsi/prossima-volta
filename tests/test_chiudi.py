@@ -117,6 +117,12 @@ def test_chiudi_tenendo_una_data(bot, telegram, store, aperto, parola):
     assert telegram.di_tipo("ferma_sondaggio") == [{"chat_id": GRUPPO, "messaggio": aperto.messaggio}]
     assert store.sondaggio_aperto() is None
     assert telegram.scritti() == ["🎲 Si gioca martedì 14/10."]
+    assert store.sondaggio(aperto.id).scelta == d("14/10")
+
+
+def test_chiudi_senza_data_non_sceglie_niente(bot, store, aperto):
+    bot.ricevi([comando("/chiudi")])
+    assert store.sondaggio(aperto.id).scelta is None
 
 
 @pytest.mark.parametrize(
