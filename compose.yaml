@@ -31,6 +31,11 @@ services:
         max-size: "10m"
         max-file: "3"
     # Nessuna porta: il bot chiama Telegram, nessuno chiama il bot.
+    # La rete `ollama` porta solo a Ollama, per le risposte (spec 2026-10-17):
+    # v. docs/messa-in-produzione.md, punto 7.
+    networks:
+      - default
+      - ollama
 
   prova:
     profiles: ["prova"]
@@ -41,3 +46,12 @@ services:
     volumes:
       - ./dati:/data
       - ./config:/config:ro
+    networks:
+      - default
+      - ollama
+
+# Creata a mano, una volta (docs/messa-in-produzione.md, punto 7): ci stanno solo
+# Ollama e il bot.
+networks:
+  ollama:
+    external: true

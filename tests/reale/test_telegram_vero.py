@@ -121,16 +121,28 @@ def test_i_comandi_del_menu():
     assert [(c["command"], c["description"]) for c in privati] == list(COMANDI_IN_PRIVATO)
 
 
+def test_sta_scrivendo():
+    """Contratto: `sendChatAction` con «typing» nella chat privata è accettato
+    (il bot lo manda mentre Ollama scrive una risposta)."""
+    bot().azione(chat())
+
+
 def test_una_menzione_dopo_un_emoji_cade_sul_nome():
     """Contratto: Telegram conta gli scostamenti delle entità in UTF-16, come
     `testi.py` (😬 ne vale due), e accetta una `text_mention` con il solo
     identificativo. Il testo è quello di «impossibile», con Alberto al posto
     del master, senza i bottoni (hanno la loro prova)."""
     alberto = Persona("abe", chat(), regole.MASTER, chiude=True)
-    altri = tuple(Persona(n, 100000001 + i, "giocatore") for i, n in enumerate(("gio", "emi", "sem", "sese")))
+    altri = tuple(
+        Persona(n, 100000001 + i, "giocatore") for i, n in enumerate(("gio", "emi", "sem", "sese"))
+    )
     giorno = date.today() + timedelta(days=7)
     t = testi.annunci(
-        [regole.Impossibile(((giorno, altri[:3]),))], regole.Roster((alberto, *altri)), bot().io(), [giorno], 1
+        [regole.Impossibile(((giorno, altri[:3]),))],
+        regole.Roster((alberto, *altri)),
+        bot().io(),
+        [giorno],
+        1,
     )
     assert t.testo.startswith("😬") and t.entita[0]["offset"] == t.testo.index("Abe") + 1
     messaggio = bot().scrivi(chat(), t.testo, t.entita)
@@ -150,7 +162,9 @@ def test_un_sondaggio_con_undici_opzioni_parte():
     frase = frase_piu_lunga()
     assert testi.utf16(frase) <= testi.LUNGHEZZA_OPZIONE
     mandato = b.manda_sondaggio(
-        chat(), "🧪 Prova di Prossima volta: 11 opzioni, non serve votare.", testi.opzioni(date_, frase)
+        chat(),
+        "🧪 Prova di Prossima volta: 11 opzioni, non serve votare.",
+        testi.opzioni(date_, frase),
     )
     assert b.ferma_sondaggio(chat(), mandato.messaggio) == [0] * (regole.MASSIMO_DATE + 1)
 
@@ -184,7 +198,9 @@ def test_fermare_un_sondaggio_cancellato():
     """Contratto: per un messaggio cancellato `stopPoll` risponde con una
     descrizione che `MessaggioSparito` riconosce."""
     b = bot()
-    mandato = b.manda_sondaggio(chat(), "🧪 Prova di Prossima volta: sparisco da solo.", ["sì", "no"])
+    mandato = b.manda_sondaggio(
+        chat(), "🧪 Prova di Prossima volta: sparisco da solo.", ["sì", "no"]
+    )
     # deleteMessage al bot non serve: qui fa la parte di chi cancella il sondaggio.
     b._chiama("deleteMessage", {"chat_id": chat(), "message_id": mandato.messaggio})
     with pytest.raises(MessaggioSparito):
@@ -198,7 +214,9 @@ def test_fermare_due_volte():
     interrotta: se Telegram cambia descrizione, la prova la riporta, e si
     corregge `_GIA_CHIUSO` in `telegram.py` (e le differenze fra test e realtà)."""
     b = bot()
-    mandato = b.manda_sondaggio(chat(), "🧪 Prova di Prossima volta: mi fermo due volte.", ["sì", "no"])
+    mandato = b.manda_sondaggio(
+        chat(), "🧪 Prova di Prossima volta: mi fermo due volte.", ["sì", "no"]
+    )
     assert b.ferma_sondaggio(chat(), mandato.messaggio) == [0, 0]
     try:
         b.ferma_sondaggio(chat(), mandato.messaggio)

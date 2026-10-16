@@ -4,7 +4,10 @@ Il bot Telegram che, nel gruppo dei *Danni Radiosi*, crea il sondaggio per la
 data della sessione seguente (`/sondaggio`), ne segue i voti e dice nel gruppo
 quando una data va bene, quando ci si è vicini e chi non ha ancora votato, e
 quando con le date proposte non ci si sta. Lo chiude Gio (o Abe, in emergenza)
-con `/chiudi`; `/aiuto` spiega i comandi nel gruppo.
+con `/chiudi`; `/aiuto` spiega i comandi nel gruppo. Con Ollama, risponde anche
+a chi risponde a un suo messaggio (e, in privato, a chi è nel roster): un modello
+capisce di che cosa parla il messaggio, il codice scrive la risposta con i fatti
+del sondaggio, un altro modello la riscrive in modo naturale.
 
 Il design sta in `docs/superpowers/specs/`, il piano in `docs/superpowers/plans/`.
 Leggi la specifica prima di cambiare il comportamento: i testi dei messaggi

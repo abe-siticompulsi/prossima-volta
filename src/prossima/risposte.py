@@ -334,7 +334,7 @@ class Esito:
     dai_fatti: bool = False
 
 
-def _letto(grezzo: str) -> tuple[str, str | None] | None:
+def leggi_tipo(grezzo: str) -> tuple[str, str | None] | None:
     try:
         dati = json.loads(grezzo)
         tipo, giorno = dati["tipo"], dati["giorno"]
@@ -379,7 +379,7 @@ def scrivi(d: Domanda, chiedi: Chiedi, roster: Roster, modelli: Modelli = MODELL
     inizio = time.monotonic()
     try:
         sistema, utente = per_il_tipo(d, roster)
-        letto = _letto(
+        letto = leggi_tipo(
             chiedi(
                 modelli.tipo,
                 sistema,

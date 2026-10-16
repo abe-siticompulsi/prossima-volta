@@ -45,6 +45,13 @@ def test_il_servizio_non_ha_privilegi_da_guadagnare():
     assert "\n    security_opt:\n      - no-new-privileges:true\n" in blocco
 
 
+def test_il_servizio_e_la_prova_arrivano_a_ollama_solo_dalla_rete_esterna():
+    for nome in ("prossima", "prova"):
+        assert "\n    networks:\n      - default\n      - ollama\n" in servizio(nome), nome
+    testo = (RADICE / "compose.yaml").read_text()
+    assert "\nnetworks:\n  ollama:\n    external: true\n" in testo
+
+
 def test_il_servizio_ha_un_limite_di_memoria_e_di_processi():
     blocco = servizio("prossima")
     assert "\n    mem_limit: 256m\n" in blocco

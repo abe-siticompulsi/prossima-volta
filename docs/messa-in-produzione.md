@@ -107,10 +107,10 @@ secondi (`init: true` in `compose.yaml` fa arrivare il segnale a Python). Poi
   e ne tocca uno vede l'avviso «Il sondaggio lo chiude Gio (o Abe, in
   emergenza).»; il tocco di Gio fa quello che dice il bottone, e i bottoni
   spariscono.
-- `/aiuto` non serve provarlo nel gruppo: scrivilo al bot in privato (il bot
-  risponde, in privato, solo ad `/aiuto` e solo a chi è nel roster; il menu
-  delle chat private mostra solo quello). Lo stesso testo lo manda anche il
-  piano reale (punto 6).
+- `/aiuto` non serve provarlo nel gruppo: scrivilo al bot in privato (in privato
+  il bot risponde solo a chi è nel roster: ad `/aiuto` e, con le risposte
+  accese, agli altri messaggi; il menu delle chat private mostra solo `/aiuto`).
+  Lo stesso testo lo manda anche il piano reale (punto 6).
 - Quando arriva il primo annuncio con dei nomi («Martedì ci siamo quasi. Pippo,
   ci sei?»), chiedi alle persone nominate se hanno ricevuto la notifica. Il controllo
   copre due casi: una persona che ha già scritto `/start` al bot (punto 1) e
@@ -146,6 +146,58 @@ quello che dice la domanda (spunta la prima e la terza data e vota, togli solo
 la terza, ritira il voto, spunta la seconda e vota). Il piano reale è verde solo se **non
 salta niente**: un test saltato non è un test superato, e `-rs` dice quale
 variabile mancava.
+
+## 7. Le risposte con Ollama
+
+Il bot risponde a chi risponde a un suo messaggio nel gruppo, e a chi è nel
+roster in privato (spec `docs/superpowers/specs/2026-10-17-risposte-design.md`).
+Usa l'Ollama di Paperless, attraverso una rete Docker che hanno solo loro due.
+
+**Una volta**, sul server:
+
+```bash
+docker network create --internal ollama
+```
+
+`--internal`: la rete non porta fuori, ci passano solo il bot e Ollama (il bot
+arriva a Telegram dalla sua rete di sempre, Ollama a Internet da quella di
+Paperless).
+
+Nel `compose` di Paperless, al servizio di Ollama, le due righe della rete (più
+la dichiarazione in fondo al file), e la porta solo sulla macchina, non più su
+`0.0.0.0` (per i prototipi dal Mac: un tunnel SSH, `ssh -L 11434:127.0.0.1:11434
+<server>`):
+
+```yaml
+  ollama:
+    # …com'è adesso, più:
+    ports:
+      - "127.0.0.1:11434:11434"
+    networks:
+      - default
+      - ollama
+
+networks:
+  ollama:
+    external: true
+```
+
+Poi `docker compose up -d` nella cartella di Paperless. Sul server servono i due
+modelli: `llama3:latest` (c'è già, lo usa Paperless) e `gemma3:12b`
+(`docker exec paperless-ollama-1 ollama pull gemma3:12b`, se l'hai tolto).
+
+In `config/prossima.env` togli il `#` dalla riga `PV_OLLAMA_URL=http://ollama:11434`
+(`ollama` è il nome del servizio di Ollama nel compose di Paperless: se è un
+altro, scrivi quello). Poi `docker compose up -d`. Nel log dell'avvio: «risposte
+con Ollama: tipo da llama3:latest, testo da gemma3:12b»; senza la riga, «risposte
+spente».
+
+Per provarle senza scrivere nel gruppo: scrivi al bot in privato («Quando si
+gioca?», «Chi c'è giovedì?», «Ciao bot!»). Compare «sta scrivendo…» e, dopo da
+qualche secondo a più di un minuto (con i modelli a freddo), la risposta. Nel
+log, per ogni risposta, il tipo e i secondi; un testo del modello scartato dai
+controlli compare come «testo di … scartato: …». Se Ollama non risponde, il bot
+dice «Ora non riesco a rispondere: riprova più tardi.» e nel log c'è il perché.
 
 ## Cambiare le frasi
 
