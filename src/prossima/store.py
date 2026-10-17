@@ -197,6 +197,7 @@ def _fatti_json(fatti: Fatti) -> str:
                 for g, presenti in sorted(fatti.possibili.items())
             },
             "impossibile": fatti.impossibile,
+            "tutti": fatti.tutti,
         }
     )
 
@@ -210,6 +211,7 @@ def _fatti(testo: str) -> Fatti:
             for g, presenti in dati.get("possibili", {}).items()
         },
         impossibile=bool(dati.get("impossibile", False)),
+        tutti=bool(dati.get("tutti", False)),
     )
 
 

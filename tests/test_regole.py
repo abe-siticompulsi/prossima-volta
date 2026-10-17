@@ -253,6 +253,16 @@ def test_dopo_registra_ogni_evento():
     f = regole.dopo(f, NonPiu(d("16/10"), (ABE,)))
     assert f.possibili == {}
     assert regole.dopo(f, Impossibile(())).impossibile
+    assert regole.dopo(f, regole.Tutti()).tutti
+
+
+def test_tutti_hanno_votato_una_volta_e_solo_con_date_in_gioco():
+    assert not regole.tutti_hanno_votato(stato(**POSSIBILE_14), Fatti())  # Pippo no
+    tutti = stato(**CON_TRE)
+    assert regole.tutti_hanno_votato(tutti, Fatti())
+    assert not regole.tutti_hanno_votato(tutti, regole.dopo(Fatti(), regole.Tutti()))
+    passate = regole.Stato(tutti.roster, (), tutti.voti)
+    assert not regole.tutti_hanno_votato(passate, Fatti())
 
 
 def test_il_buio_comincia_dopo_23_ore():

@@ -196,6 +196,21 @@ stesso giro prima «non più», poi «possibile», poi «quasi», poi «impossib
    di chi ce l'ha («Abe, decidi tu:», o «Abe e Emi, decidete voi:» se sono più
    di uno). Le date dei bottoni si dicono come nel testo («Tieni lunedì
    13» se il sondaggio sta su più settimane).
+5. **Hanno votato tutti** — una volta per sondaggio, quando ha votato tutto il
+   roster e l'ultimo voto non ha portato nessun annuncio: si ripete la
+   situazione già annunciata. Con tutti i voti ogni data è possibile o fuori,
+   quindi i casi sono due:
+   - «Hanno votato tutti. La situazione non cambia: martedì si può fare.»;
+   - dopo «impossibile»: «Hanno votato tutti. La situazione non cambia: non ci
+     sono date con quattro giocatori. Con tre: martedì. Gio, decidi tu con i
+     bottoni qui sopra.» (o «…, e nemmeno con tre. Gio, decidi tu con i bottoni
+     qui sopra.»), con la menzione di chi decide come in «impossibile», senza
+     bottoni nuovi.
+   Se l'ultimo voto porta un annuncio, la situazione la dice quello, e «hanno
+   votato tutti» non si dice più. Non si dice nemmeno se nessun voto è arrivato
+   da quando il bot è acceso (dopo un riavvio, o un deploy con il sondaggio
+   aperto e tutti i voti già dati), né con un «possibile» annunciato su una data
+   passata (v. sotto).
 
 Un annuncio conta come fatto solo dopo che Telegram l'ha accettato; un messaggio
 che accorpa più date le conta tutte insieme. Quali

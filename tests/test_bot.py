@@ -468,6 +468,59 @@ def test_impossibile_e_di_nuovo_dopo_che_una_data_e_tornata_in_gioco(bot, telegr
     assert menzionati(telegram.di_tipo("scrivi")[0]) == ["Gio"]
 
 
+def test_l_ultimo_voto_che_non_cambia_niente_lo_dice(bot, telegram):
+    bot.ricevi([comando("/sondaggio mar gio")])
+    for persona in (GIO, ABE, EMI, SEM, SESE):
+        vota(bot, telegram, persona, "14/10")
+    vota(bot, telegram, PIPPO, "16/10")
+    assert telegram.scritti()[-1] == "Hanno votato tutti. La situazione non cambia: martedì si può fare."
+    vota(bot, telegram, PIPPO, "14/10 16/10")  # una volta sola
+    assert len(telegram.scritti()) == 3
+
+
+def test_l_ultimo_voto_che_cambia_la_situazione_dice_solo_quella(bot, telegram):
+    bot.ricevi([comando("/sondaggio mar gio")])
+    for persona in (GIO, ABE, EMI, SEM):
+        vota(bot, telegram, persona, "14/10")
+    vota(bot, telegram, SESE, "16/10")
+    vota(bot, telegram, PIPPO, "14/10")
+    annunci = ["Martedì ci siamo quasi. Sese e Pippo, ci siete?", "✅ Martedì si può fare!"]
+    assert telegram.scritti() == annunci
+    vota(bot, telegram, PIPPO, "14/10 16/10")  # hanno votato tutti già prima: niente
+    assert telegram.scritti() == annunci
+
+
+def test_l_ultimo_voto_con_l_impossibile_ricorda_le_date_con_tre(bot, telegram):
+    bot.ricevi([comando("/sondaggio mar gio")])
+    for persona in (GIO, ABE, EMI):
+        vota(bot, telegram, persona, "14/10")
+    vota(bot, telegram, SESE, "nessuna")
+    vota(bot, telegram, PIPPO, "nessuna")  # «impossibile», e nessuna data con tre
+    vota(bot, telegram, SEM, "14/10")  # martedì con tre: ancora impossibile
+    [_, tutti] = telegram.di_tipo("scrivi")
+    assert tutti["testo"] == (
+        "Hanno votato tutti. La situazione non cambia: non ci sono date con quattro "
+        "giocatori. Con tre: martedì. Gio, decidi tu con i bottoni qui sopra."
+    )
+    assert menzionati(tutti) == ["Gio"]
+    assert not tutti.get("bottoni")
+
+
+def test_dopo_un_riavvio_senza_voti_nuovi_hanno_votato_tutti_non_si_dice(riavvia, telegram):
+    bot = riavvia()
+    bot.ricevi([comando("/sondaggio mar gio")])
+    for persona in (GIO, ABE, EMI, SEM, SESE):
+        vota(bot, telegram, persona, "14/10")
+    # l'ultimo voto non cambia niente, e il bot si riavvia prima di dirlo
+    bot = riavvia(attesa_annunci=ATTESA_ANNUNCI)
+    vota(bot, telegram, PIPPO, "16/10")
+    riavvia().ricevi([])
+    assert telegram.scritti() == [
+        "Martedì ci siamo quasi. Sese e Pippo, ci siete?",
+        "✅ Martedì si può fare!",
+    ]
+
+
 def test_chi_non_e_nel_roster_non_conta_negli_annunci(bot, telegram):
     bot.ricevi([comando("/sondaggio mar")])
     for persona in (GIO, ABE, EMI):
@@ -499,7 +552,9 @@ def test_impossibile_conta_solo_le_date_da_oggi_in_poi(bot, telegram, orologio):
     # nessuna data da tenere, e il 14 (con tre, ma passato) non si propone
     assert telegram.scritti() == [
         "😬 Con i voti attuali non ci sono date con quattro giocatori, e nemmeno con tre. "
-        "Gio, decidi tu:"
+        "Gio, decidi tu:",
+        "Hanno votato tutti. La situazione non cambia: non ci sono date con quattro "
+        "giocatori, e nemmeno con tre. Gio, decidi tu con i bottoni qui sopra.",
     ]
 
 

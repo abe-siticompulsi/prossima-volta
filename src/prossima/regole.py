@@ -450,7 +450,13 @@ class Ripresa:
     quattro giocatori, senza nomi."""
 
 
-Evento = Annuncio | Rientro | Ripresa
+@dataclass(frozen=True)
+class Tutti:
+    """Ha votato tutto il roster: si dice una volta per sondaggio, e solo se
+    l'ultimo voto non ha portato un annuncio (che dice già la situazione)."""
+
+
+Evento = Annuncio | Rientro | Ripresa | Tutti
 
 
 @dataclass(frozen=True)
@@ -462,6 +468,7 @@ class Fatti:
     # al momento dell'annuncio, o None se il bot non lo sa più.
     possibili: Mapping[date, frozenset[int] | None] = field(default_factory=dict)
     impossibile: bool = False
+    tutti: bool = False
 
 
 def dopo(fatti: Fatti, evento: Evento) -> Fatti:
@@ -481,6 +488,8 @@ def dopo(fatti: Fatti, evento: Evento) -> Fatti:
             return replace(fatti, impossibile=False)
         case Ripresa():
             return replace(fatti, possibili=dict.fromkeys(fatti.possibili))
+        case Tutti():
+            return replace(fatti, tutti=True)
     raise TypeError(f"evento sconosciuto: {evento!r}")
 
 
@@ -530,6 +539,11 @@ def _andati_via(
     return tuple(
         p for p in stato.roster.persone if p.telegram_id in prima and p.telegram_id not in restano
     )
+
+
+def tutti_hanno_votato(stato: Stato, fatti: Fatti) -> bool:
+    """Tutto il roster ha votato, con date ancora in gioco, e non è stato detto."""
+    return bool(stato.date) and not stato.senza_voto and not fatti.tutti
 
 
 def rientrato(stato: Stato, fatti: Fatti) -> bool:

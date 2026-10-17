@@ -520,7 +520,15 @@ class Bot:
             fatti = regole.dopo(fatti, regole.Rientro())
             self._store.salva_fatti(sondaggio.id, fatti)
             self._togli_bottoni()  # una data è tornata in gioco: non c'è più da decidere
-        for gruppo in _per_tipo(regole.annunci_da_fare(stato, fatti)):
+        annunci = regole.annunci_da_fare(stato, fatti)
+        if regole.tutti_hanno_votato(stato, fatti):
+            # Con un annuncio la situazione la dice lui. Senza un voto da quando
+            # il bot è acceso (dopo un riavvio) non c'è un ultimo voto da dire.
+            if not annunci and self._ultimo_voto is not None:
+                self._di_che_hanno_votato_tutti(sondaggio, stato, fatti)
+            fatti = regole.dopo(fatti, regole.Tutti())
+            self._store.salva_fatti(sondaggio.id, fatti)
+        for gruppo in _per_tipo(annunci):
             if (sondaggio.id, gruppo) in self._annunci_rifiutati:
                 continue
             testo = testi.annunci(gruppo, self._roster, self._nome, sondaggio.date, sondaggio.id)
@@ -538,6 +546,18 @@ class Bot:
             if testo.bottoni:
                 self._togli_bottoni()  # quelli di un «impossibile» di prima
                 self._store.segna_messaggio_con_bottoni(sondaggio.id, messaggio)
+
+    def _di_che_hanno_votato_tutti(
+        self, sondaggio: Sondaggio, stato: regole.Stato, fatti: regole.Fatti
+    ) -> None:
+        testo = testi.hanno_votato_tutti(stato, fatti, sondaggio.date)
+        if testo is None:
+            return
+        try:
+            self._invio.scrivi(testo)
+        except TelegramRifiuto as e:
+            # si dice una volta sola: rifiutato, non si riprova
+            log.error("«hanno votato tutti» rifiutato da Telegram: %s (%r)", e, testo.testo)
 
     def _togli_bottoni(self) -> None:
         """Toglie i bottoni dell'ultimo «impossibile», se ci sono: al meglio."""

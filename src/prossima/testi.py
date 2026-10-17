@@ -241,7 +241,7 @@ def _impossibile(
     niente: è un errore di chi chiama."""
     if sondaggio_id is None:
         raise ValueError("«impossibile» ha i bottoni: serve il sondaggio")
-    chi = (roster.master,) if roster.master.chiude else roster.chi_chiude
+    chi = _chi_decide(roster)
     s = _Scrittura()
     if a.con_tre:
         giorni = [g for g, _ in a.con_tre]
@@ -260,6 +260,37 @@ def _impossibile(
     righe = [tuple(tieni[i : i + 2]) for i in range(0, len(tieni), 2)]
     righe.append((("Rimanda alla prossima settimana", f"chiudi:{sondaggio_id}:{regole.RIMANDA}"),))
     return replace(s.fatto(), bottoni=tuple(righe))
+
+
+def _chi_decide(roster: regole.Roster) -> tuple[Persona, ...]:
+    return (roster.master,) if roster.master.chiude else roster.chi_chiude
+
+
+def hanno_votato_tutti(
+    stato: regole.Stato, fatti: regole.Fatti, date_sondaggio: Sequence[date]
+) -> Testo | None:
+    """L'ultimo voto non ha cambiato niente: si ripete la situazione già
+    annunciata. Con tutti i voti una data è possibile o fuori, quindi è una di
+    due; se non è nessuna delle due (un «possibile» su una data passata), niente."""
+    solo_il_giorno = una_settimana(date_sondaggio)
+    inizio = "Hanno votato tutti. La situazione non cambia: "
+    possibili = regole.possibili(stato)
+    if possibili:
+        return Testo(f"{inizio}{date_dette(possibili, solo_il_giorno)} si può fare.")
+    if not (fatti.impossibile and regole.impossibile(stato)):
+        return None
+    con_tre = [g for g in stato.date if regole.conta(stato, g).con_tre]
+    s = _Scrittura()
+    if con_tre:
+        s.testo(
+            f"{inizio}non ci sono date con quattro giocatori. "
+            f"Con tre: {date_dette(con_tre, solo_il_giorno)}. "
+        )
+    else:
+        s.testo(f"{inizio}non ci sono date con quattro giocatori, e nemmeno con tre. ")
+    chi = _chi_decide(stato.roster)
+    verbo = ", decidi tu" if len(chi) == 1 else ", decidete voi"
+    return s.menzioni(chi, " e ").testo(f"{verbo} con i bottoni qui sopra.").fatto()
 
 
 # --- le istruzioni (§3.9)

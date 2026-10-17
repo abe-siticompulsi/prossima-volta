@@ -338,6 +338,7 @@ def test_i_fatti_tornano_come_sono_stati_salvati(store):
         quasi=frozenset({d("14/10")}),
         possibili={d("14/10"): frozenset({1, 2}), d("16/10"): None},
         impossibile=True,
+        tutti=True,
     )
     store.salva_fatti(s.id, fatti)
     assert store.fatti(s.id) == fatti
