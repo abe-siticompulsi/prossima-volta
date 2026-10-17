@@ -50,8 +50,8 @@ services:
       - default
       - ollama
 
-# Creata a mano, una volta (docs/messa-in-produzione.md, punto 7): ci stanno solo
-# Ollama e il bot.
+# La dichiara il compose di Paperless, che va avviato prima (docs/messa-in-produzione.md,
+# punto 7): ci stanno solo Ollama e il bot.
 networks:
   ollama:
     external: true

@@ -153,15 +153,9 @@ Il bot risponde a chi risponde a un suo messaggio nel gruppo, e a chi è nel
 roster in privato (spec `docs/superpowers/specs/2026-10-17-risposte-design.md`).
 Usa l'Ollama di Paperless, attraverso una rete Docker che hanno solo loro due.
 
-**Una volta**, sul server:
-
-```bash
-docker network create --internal ollama
-```
-
-`--internal`: la rete non porta fuori, ci passano solo il bot e Ollama (il bot
-arriva a Telegram dalla sua rete di sempre, Ollama a Internet da quella di
-Paperless).
+La rete la dichiara il `compose` di Paperless, che ha Ollama: così sta scritta in
+un file (e nei backup), e `docker compose up -d` la crea da sé. Il `compose.yaml`
+del bot la usa come esterna: c'è già, la trova.
 
 Nel `compose` di Paperless, al servizio di Ollama, le due righe della rete (più
 la dichiarazione in fondo al file), e la porta solo sulla macchina, non più su
@@ -179,10 +173,20 @@ la dichiarazione in fondo al file), e la porta solo sulla macchina, non più su
 
 networks:
   ollama:
-    external: true
+    name: ollama
+    internal: true
 ```
 
-Poi `docker compose up -d` nella cartella di Paperless. Sul server servono i due
+`name: ollama`: il nome resta quello, senza il prefisso del progetto di
+Paperless, ed è quello che cerca il bot. `internal: true`: la rete non porta
+fuori, ci passano solo il bot e Ollama (il bot arriva a Telegram dalla sua rete
+di sempre, Ollama a Internet da quella di Paperless).
+
+Poi `docker compose up -d` nella cartella di Paperless, **prima** del bot: senza
+la rete il bot non parte («network ollama declared as external, but could not be
+found»). Vale anche su un server nuovo o dopo un ripristino: prima Paperless, poi
+il bot. Dopo un riavvio della macchina non c'è niente da fare: la rete resta, e
+Docker riavvia i container da sé. Sul server servono i due
 modelli: `llama3:latest` (c'è già, lo usa Paperless) e `gemma3:12b`
 (`docker exec paperless-ollama-1 ollama pull gemma3:12b`, se l'hai tolto).
 
@@ -204,8 +208,9 @@ docker compose start prossima
 ```
 
 Senza Ollama (per esempio in un'altra installazione): `compose.yaml` vuole
-comunque la rete `ollama`, perché è dichiarata esterna. Creala vuota con il primo
-comando qui sopra, oppure togli le righe `networks` dal file.
+comunque la rete `ollama`, perché è dichiarata esterna. Creala vuota con
+`docker network create --internal ollama`, oppure togli le righe `networks` dal
+file.
 
 Per provarle senza scrivere nel gruppo: scrivi al bot in privato («Quando si
 gioca?», «Chi c'è giovedì?», «Ciao bot!»). Compare «sta scrivendo…» e, dopo da
